@@ -11,7 +11,16 @@ Instead of assuming ideal AWGN channels, we integrate **fading models** (Rayleig
 - Integrate **modulation constraints** to ensure practical feasibility.
 
 ## 🏗️ Project Structure
-📂 DeepComm-Autoencoder-Realistic-Channels │── 📄 README.md # Project documentation │── 📂 models # Neural network architectures │── 📂 datasets # Simulated or generated datasets │── 📂 experiments # Training and evaluation scripts │── 📂 results # Plots, logs, and trained models └── 📄 requirements.txt # Dependencies
+📂 DeepComm-Autoencoder-Realistic-Channels 
+│── 📄 README.md # Project documentation 
+│── 📄 requirements.txt # Dependencies
+│── 📄 train.py # Main training script
+│── 📄 models.py # Neural network architectures 
+│── 📄 channel.py # Simulated channels 
+│── 📄 modulation.py # Simulated channels 
+│── 📄 utils.py # Simulated channels 
+│── 📂 experiments # Training and evaluation scripts 
+└── 📂 results # Plots, logs, and trained models 
 
 
 ## 🚀 Getting Started
