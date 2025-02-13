@@ -13,6 +13,7 @@ from IPython import display
 
 from channel import Channel
 from models import Encoder, Decoder
+from utils import MemoryMessages
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
