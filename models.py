@@ -9,29 +9,20 @@ print(f"Pytorch device: {device}")
 
 class Encoder(nn.Module):
 
-    def __init__(self, m, n, dim=512, use_embedding=True, use_paper_norm=False):
+    def __init__(self, m, n, dim=512):
         super(Encoder, self).__init__()
         
         self.n = n
-        self.use_paper_norm = use_paper_norm
 
-        if use_embedding:
+        self.linear_M = nn.Sequential(
+            nn.Embedding(num_embeddings=m, embedding_dim=m),
+            nn.ReLU(),
+        )
 
-            self.linear_M = nn.Sequential(
-                nn.Embedding(num_embeddings=m, embedding_dim=m),
-                nn.ReLU(),
-            )
-        else:
-            self.linear_M = nn.Sequential(
-                nn.Linear(in_features=m, out_features=m), 
-                nn.ReLU(),
-            )
-        
         self.linear_N = nn.Sequential(
             nn.Linear(in_features=m, out_features=n),
         )
-        
-        
+               
         self.normalization = nn.BatchNorm1d(num_features=n)
         
         self.init_weights()
