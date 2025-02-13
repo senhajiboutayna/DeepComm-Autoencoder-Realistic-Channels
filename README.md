@@ -17,9 +17,9 @@ Instead of assuming ideal AWGN channels, we integrate **fading models** (Rayleig
 │── 📄 requirements.txt # Dependencies
 │── 📄 train.py # Main training script
 │── 📄 models.py # Neural network architectures 
-│── 📄 channel.py # Simulated channels 
-│── 📄 modulation.py # Simulated channels 
-│── 📄 utils.py # Simulated channels 
+│── 📄 channel.py # Simulates channels 
+│── 📄 modulation.py # Adds modulation constraints 
+│── 📄 utils.py # Utility functions 
 │── 📂 experiments # Training and evaluation scripts 
 └── 📂 results # Plots, logs, and trained models 
 ```
