@@ -36,10 +36,7 @@ class Encoder(nn.Module):
     def forward(self,x):
         x = self.linear_M(x)
         x = self.linear_N(x.squeeze())
-        if self.use_paper_norm:
-            y = self.normalization(x, self.n)
-        else:
-            y = self.normalization(x)
+        y = self.normalization(x)
 
         return y
 

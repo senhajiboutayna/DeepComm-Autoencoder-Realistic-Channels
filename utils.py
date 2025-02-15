@@ -44,3 +44,24 @@ class MemoryMessages():
                 return np.array(batch), np.array(targets)
         
         return np.array(batch), np.array(targets)
+    
+def count_errors(inputs, targets):
+    """
+    Function to try count the errrors after Rx/Decoding wrt original messages (targets)
+    Args:
+        inputs pytorch tensor of shape(batch_size, m): 
+        targets pytorch tensor of shape(batch_size): 
+    Returns:
+        total_errrors (float): Total errors found
+    """
+    # Each example i has m probabilities. Is the probabilit of example i being m message
+    # Choose the highest probability
+    chosen_input = torch.argmax(inputs, dim=1)
+    
+    # Get where both tensors are different
+    errors = targets != chosen_input
+    
+    # Sum the errors to get the total
+    total_errors = errors.sum().to("cpu").numpy()
+    
+    return total_errors
