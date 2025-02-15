@@ -121,7 +121,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             """
             last_losses = np.array(losses[-10:])
             print('les 10 dernières valeurs de perte :', last_losses)
-            if np.all(last_losses < 0.005):
+            if np.all(last_losses < stop_value):
                 print("Le modele a converge.")
             else:
                 print("L'entrainement continue.")
@@ -129,11 +129,105 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             # If the loss is small enough the model has converged. Stop training
             if np.all(last_losses < stop_value):
                 return encoder, decoder, errors
+            
+            """
+        ce code se concentre sur la visualisation et le suivi des métriques pendant l'entraînement, comme la perte (loss) et les erreurs (errors)
+        Objectif principal : Afficher et tracer les performances de l'autoencodeur pendant l'entraînement.
+        """       
+
+        if plot is not None : 
+            #Affichage des Résultats de l’Époque : 
+            print("Finished epoch: %d. Errors %f. Loss: %f" % (epoch, errors[-1], losses[-1]), end="\r")
+            """ 
+            Exemple d'affichage : 
+            Finished epoch: 5. Errors 0.025000. Loss: 0.001234            
+            """
+
+            # Calcul des Moyennes
+            """
+            Pourquoi les moyennes : 
+            Les moyennes permettent de lisser les variations et de mieux observer les tendances.
+            """
+
+            if epoch > plot:
+                avg = np.mean(losses[-plot:])
+                avg_err = np.mean(errors[-plot:])
+            else:
+                avg = np.mean(losses)
+                avg_err = np.mean(errors)
+            avg_losses.append(avg)
+            avg_errors.append(avg_err)
+
+            # Tracer les erreurs
+            if  epoch%plot==0 and epoch != 0 :
+                plt.clf() ## Efface l'ancien graphique pour éviter qu'il ne se superpose au nouveau.
+                plt.plot(errors, label = 'Errors. Supervised training')
+                plt.plot(avg_errors,label="Average Errors. Supervised training")
+                plt.legend(loc = 'upper right')
+                plt.draw()
+                #plt.show()
+
+            """
+            À la fin de l'entraînement, affiche les métriques finales:
+            Dernière valeur des erreurs.
+            Dernière valeur de la perte.
+
+            Exemple d'affichage : 
+            Finished training. Errors 0.020000. Loss: 0.000900
+            """
+
+            if epoch == n_epochs-1 : 
+                print("Finished training. Errors %f. Loss: %f" % (errors[-1], losses[-1]))
+
+            print("Errors :", errors)
 
 
     return encoder, decoder, errors
 
+def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples=10000):
+    """
+    Évalue l'autoencodeur en mesurant le BER sur un grand nombre d'exemples.
+    """
+    encoder.eval()
+    decoder.eval()
+    errors = 0
+
+    for _ in range(n_samples):
+        # Générer un message aléatoire
+        message = torch.randint(0, m, (1,)).to(device)
+
+        # Encoder le message
+        encoded = encoder(message)
+
+        # Appliquer le canal en appelant directement la fonction `channel()`
+        received = channel(encoded, n, k, snr_db, chann_type)
+
+        # Decoder le message
+        decoded = decoder(received)
+        predicted = torch.argmax(decoded, dim=1)
+
+        # Compter les erreurs
+        errors += (predicted != message).sum().item()
+
+    ber = errors / n_samples
+    print(f"BER (SNR={snr_db} dB, Canal={chann_type}): {ber:.6f}")
+    return ber
+
+def plot_training_loss(losses):
+    """
+    Trace l'évolution de la perte pendant l'entraînement.
+    """
+    plt.figure(figsize=(8,5))
+    plt.plot(losses, label="Perte d'entraînement")
+    plt.xlabel("Itérations")
+    plt.ylabel("Perte (Cross Entropy)")
+    plt.title("Évolution de la perte pendant l'entraînement")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
 if train:
-    _, _, _ = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="AWGN",batch_size=64, n_epochs=100, lr=0.001,
-                                clipping=0.5, plot=10, stop_value=0.005)
+    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="AWGN", batch_size=64, n_epochs=10000, lr=0.001,
+                                clipping=0.5, plot=10, stop_value=0.005)    
     
+    plot_training_loss(errors)  # Affichage de l'évolution de la perte
