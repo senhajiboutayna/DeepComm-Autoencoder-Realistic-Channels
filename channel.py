@@ -2,8 +2,10 @@ import torch
 import matplotlib.pyplot as plt 
 import numpy as np
 import math
+from scipy import special
+from scipy.stats import norm, rayleigh, rice
 
-def channel(x, n, k, snr_db, chann_type="AWGN", K_rician=5):
+def channel(x, n, k, snr_db, chann_type, K_rician):
     """
     Definition of the channel. e.g. Add AWGN to the samples
     Args:
@@ -38,6 +40,8 @@ def channel(x, n, k, snr_db, chann_type="AWGN", K_rician=5):
         else:
             x_channel = x + var_channel*np.random.randn(*x.shape)  # Génère un bruit gaussien pour x.
 
+        print(f"Mean of noise - AWGN: {torch.mean(var_channel * torch.randn_like(x))}, Std of noise - AWGN: {torch.std(var_channel * torch.randn_like(x))}")
+
     elif chann_type == "Rayleigh":
         # Rayleigh fading channel
         fading = torch.abs(torch.randn_like(x) + 1j * torch.randn_like(x)) / math.sqrt(2)
@@ -51,10 +55,14 @@ def channel(x, n, k, snr_db, chann_type="AWGN", K_rician=5):
             noise = var_channel * np.random.randn(*x.shape)
             x_channel = fading * x + noise
 
+        print(f"Mean x_channel - Rayleigh: {torch.mean(x_channel)}, Std x_channel - Rayleigh: {torch.std(x_channel)}")
+
     elif chann_type == "Rician":
         K_rician = torch.tensor(K_rician, dtype=torch.float32)  # Convertir en tenseur
         fading = torch.sqrt(K_rician / (K_rician + 1)) + torch.sqrt(1 / (K_rician + 1)) * torch.abs(torch.randn_like(x) + 1j * torch.randn_like(x))
         x_channel = fading.real * x + var_channel * torch.randn_like(x)
+
+        print(f"Mean x_channel - Rician: {torch.mean(x_channel)}, Std x_channel - Rician: {torch.std(x_channel)}")
 
     else:
         raise ValueError(f"Type de canal non supporté: {chann_type}")
@@ -62,7 +70,7 @@ def channel(x, n, k, snr_db, chann_type="AWGN", K_rician=5):
     return x_channel
 
 
-def plot_channel_distribution(chann_type, snr_db=10, n_samples=10, K_rician=3):
+def plot_channel_distribution_AWGN(snr_db, n_samples):
     """
     Vérifie la distribution du signal après passage dans un canal donné.
     """
@@ -70,19 +78,103 @@ def plot_channel_distribution(chann_type, snr_db=10, n_samples=10, K_rician=3):
     x = torch.randn(n_samples, n)  # Signal d'entrée simulé
 
     # Appliquer le canal
-    x_channel = channel(x, n, k, snr_db, chann_type, K_rician)
+    x_channel = channel(x, n, k, snr_db, chann_type = "AWGN", K_rician=3)
 
     # Tracer l'histogramme
     plt.figure(figsize=(8, 5))
-    plt.hist(x_channel.numpy().flatten(), bins=50, density=True, alpha=0.6, label=f"{chann_type} Channel")
+
+    x_channel_np = x_channel.numpy().flatten()  # Convertir en numpy
+
+    plt.hist(x_channel_np, bins=50, density=True, alpha=0.6, label="Simulated")
+    
+    x_range = np.linspace(x_channel_np.min(), x_channel_np.max(), 100)  
+    plt.plot(x_range, norm.pdf(x_range, 0, 1/np.sqrt(2)), 'r-', label='Theoretical')
     plt.xlabel("Valeur du signal")
     plt.ylabel("Densité")
-    plt.title(f"Distribution du signal après le canal {chann_type}")
+    plt.title(f"Distribution du signal après le canal AWGN")
     plt.legend()
     plt.grid()
     plt.show()
 
-# Tester les trois canaux
-plot_channel_distribution("AWGN")
-plot_channel_distribution("Rayleigh")
-plot_channel_distribution("Rician")
+def plot_channel_distribution_Rayleigh(snr_db=10, n_samples=10000):
+    """
+    Vérifie la distribution du signal après passage dans un canal donné.
+    """
+    n, k = 7, 4  # Exemple de dimensions
+    x = torch.randn(n_samples, n)  # Signal d'entrée simulé
+
+    # Appliquer le canal
+    x_channel = channel(x, n, k, snr_db, chann_type = "Rayleigh", K_rician = 3)
+
+    x_channel_np = x_channel.numpy().flatten()  # Convertir en numpy
+
+    # Tracer l'histogramme
+    plt.figure(figsize=(8, 5))
+    plt.hist(x_channel_np, bins=50, density=True, alpha=0.6, label=f"Simulated")
+
+    x_range = np.linspace(0, 8, 500)
+    plt.plot(x_range, rayleigh.pdf(x_range, scale=1 / np.sqrt(2)), 'r-', label='Theoretical')
+
+    plt.xlabel("Valeur du signal")
+    plt.ylabel("Densité")
+    plt.title(f"Distribution du signal après le canal Rayleigh")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+def plot_channel_distribution_Rician(snr_db=10, n_samples=10000, K_rician=3):
+    """
+    Vérifie la distribution du signal après passage dans un canal donné.
+    """
+    n, k = 7, 4  # Exemple de dimensions
+    x = torch.randn(n_samples, n)  # Signal d'entrée simulé
+
+    # Appliquer le canal
+    x_channel = channel(x, n, k, snr_db, chann_type = "Rician", K_rician = K_rician)
+
+    x_channel_np = x_channel.numpy().flatten()  # Convertir en numpy
+
+    # Tracer l'histogramme
+    plt.figure(figsize=(8, 5))
+    plt.hist(x_channel.numpy().flatten(), bins=50, density=True, alpha=0.6, label=f"Simulated")
+    
+    x_range = np.linspace(0, 8, 500)
+    plt.plot(x_range, rice.pdf(x_range, K_rician, scale=1 / np.sqrt(2)), 'r-', label='Theoretical')
+
+    plt.xlabel("Valeur du signal")
+    plt.ylabel("Densité")
+    plt.title(f"Distribution du signal après le canal Rician")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+def plot_fading_distributions():
+    """Affichage des distributions Rayleigh et Rician pour différentes valeurs de K."""
+    plt.figure(figsize=(8, 5))
+
+    K_values = [0, 1, 2, 4]  # Valeurs de K testées
+    x_range = np.linspace(0, 8, 500)
+
+    for K in K_values:
+        if K == 0:
+            pdf = rayleigh.pdf(x_range, scale=1 / np.sqrt(2))
+            label = "K=0 (Rayleigh)"
+        else:
+            pdf = rice.pdf(x_range, K, scale=1 / np.sqrt(2))
+            label = f"K={K}"
+
+        plt.plot(x_range, pdf, label=label)
+
+    plt.xlabel("Received Signal Envelope Voltage r (volts)")
+    plt.ylabel("P(r)")
+    plt.title("Rayleigh et Rician Fading Distributions")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+plot_channel_distribution_AWGN(snr_db=10, n_samples=10000)
+plot_channel_distribution_Rayleigh(snr_db=10, n_samples=10000)
+plot_channel_distribution_Rician(snr_db=10, n_samples=10000, K_rician=3)
+
+# Tracé des différentes distributions de fading
+plot_fading_distributions()

@@ -20,6 +20,7 @@ Instead of assuming ideal AWGN channels, we integrate **fading models** (Rayleig
 │── 📄 channel.py # Simulates channels 
 │── 📄 modulation.py # Adds modulation constraints 
 │── 📄 utils.py # Utility functions 
+│── 📂 checkpoints # Folder to store weights after training
 │── 📂 experiments # Training and evaluation scripts 
 └── 📂 results # Plots, logs, and trained models 
 ```
