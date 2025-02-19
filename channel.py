@@ -35,9 +35,16 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3):
     elif chann_type == "Rician":
         # Fading Rician = Composante directe + diffusion (Rayleigh)
         K = torch.tensor(K_rician, dtype=torch.float32)  # Facteur K
-        h = torch.sqrt(K / (K + 1)) + torch.sqrt(1 / (K + 1)) * torch.abs(torch.randn_like(x) + 1j * torch.randn_like(x))
-        noise = sigma * torch.randn_like(x)
-        x_channel = h * x + noise
+        s = np.sqrt(K / (K + 1))  # Composante directe (LOS)
+        sigma_fading = np.sqrt(1 / (2 * (K + 1)))  # Composante diffusée (NLOS)
+
+         # Génération du coefficient de fading Rician
+        h_real = s + sigma_fading * torch.randn_like(x)
+        h_imag = sigma_fading * torch.randn_like(x)
+        h = torch.sqrt(h_real**2 + h_imag**2)  # Module du canal
+    
+        noise = sigma * torch.randn_like(x)   # Bruit Gaussien
+        x_channel = h * x + noise   # Application du fading
         print(f"Mean x_channel - Rician: {torch.mean(x_channel)}, Std x_channel - Rician: {torch.std(x_channel)}")
 
     else:
@@ -60,16 +67,16 @@ def plot_channel_distribution(snr_db=10, n_samples=10000, chann_type="AWGN", K_r
     plt.hist(x_channel_np, bins=50, density=True, alpha=0.6, label="Simulated")
 
     # Théorie
-    x_range = np.linspace(0, x_channel_np.max(), 500)
+    x_range = np.linspace(0, x_channel_np.max(), 1000)
     
     if chann_type == "AWGN":
         plt.plot(x_range, norm.pdf(x_range, loc=1, scale=np.sqrt(1 / (2 * snr_db))), 'r-', label="Theoretical")
     elif chann_type == "Rayleigh":
         plt.plot(x_range, rayleigh.pdf(x_range, scale=1 / np.sqrt(2)), 'r-', label="Theoretical")
     elif chann_type == "Rician":
-        v = np.sqrt(K_rician / (K_rician + 1))  # Décalage théorique correct
-        sigma = 1 / np.sqrt(2 * (K_rician + 1))  # Échelle correcte
-        plt.plot(x_range, rice.pdf(x_range, v, scale=sigma), 'r-', label="Theoretical")
+        #v = np.sqrt(K_rician)  # Décalage théorique correct
+        sigma = 1 / np.sqrt(2)  # Échelle correcte
+        plt.plot(x_range, rice.pdf(x_range, K_rician, scale=sigma), 'r-', label="Theoretical")
 
     plt.xlabel("Valeur du signal")
     plt.ylabel("Densité")
@@ -85,7 +92,7 @@ def plot_fading_distributions():
     """
     plt.figure(figsize=(8, 5))
 
-    K_values = [0, 1, 2, 4]  # Différentes valeurs de K
+    K_values = [0, 1, 2, 3, 4]  # Différentes valeurs de K
     x_range = np.linspace(0, 5, 500)
 
     for K in K_values:
