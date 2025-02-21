@@ -68,7 +68,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
                 break
 
             ### Passage du message par le canal 
-            data_channel = channel(encoded_data, n, k, snr_db, chann_type=chann_type)
+            data_channel = channel(encoded_data, snr_db, chann_type=chann_type)
             data_channel = torch.clamp(data_channel, -1e5, 1e5)  # Ajustez les bornes si nécessaire
             if torch.isnan(data_channel).any():
                 print("NaN detected after channel. Epoch: %d" % (epoch))
@@ -227,7 +227,7 @@ def plot_training_loss(losses):
     plt.show()
 
 if train:
-    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="AWGN", batch_size=64, n_epochs=10000, lr=0.001,
+    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="Rician", batch_size=64, n_epochs=10000, lr=0.001,
                                 clipping=0.5, plot=10, stop_value=0.005)    
     
     plot_training_loss(errors)  # Affichage de l'évolution de la perte
