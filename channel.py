@@ -29,7 +29,7 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     if chann_type == "AWGN":
         h = torch.ones_like(x)  # 🚀 Canal AWGN = pas d'effet de fading, donc h = 1
         noise = sigma_noise * torch.randn_like(x)  # Bruit Gaussien
-        x_channel = x + noise
+        x_channel = h * x + noise
         print(f"Mean of noise - AWGN: {torch.mean(noise)}, Std of noise - AWGN: {torch.std(noise)}")
 
     elif chann_type == "Rayleigh":
@@ -42,7 +42,7 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     elif chann_type == "Rician":
         # Fading Rician = Composante directe + diffusion (Rayleigh)
         K = torch.tensor(K_rician, dtype=torch.float32)  # Facteur K
-        s = np.sqrt(K / (K + 1))  # Composante directe (LOS)
+        s = np.sqrt(K)  # Composante directe (LOS)
         sigma_fading = np.sqrt(1 / (2 * (K + 1)))  # Composante diffusée (NLOS)
 
          # Génération du coefficient de fading Rician
@@ -59,17 +59,20 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     
     # Ajout du bruit sur l'estimation du canal (CSI imparfait)
     if chann_type == "AWGN":
-        h_hat = torch.clamp(h + sigma_CSI * torch.randn_like(h), min=0.1)
+        h_hat = 1 + sigma_CSI * 0.1 * torch.randn_like(h)  # Réduit l'impact du bruit
+        h_hat = torch.clamp(h_hat, min=0.5, max=1.5)  # Garde une variation plus réaliste
+        x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
     else:
         h_hat = torch.clamp(h + sigma_CSI * torch.abs(torch.randn_like(h)), min=0.1)
+        x_channel_CSI = h_hat * x + noise
 
     # Égalisation avec CSI parfait
     x_received = x_channel / h  
 
     # Égalisation avec CSI bruité
-    x_received_csi_bruite = x_channel / h_hat 
+    x_received_CSI = x_channel / h_hat 
 
-    return x_channel, x_received, x_received_csi_bruite, h, h_hat
+    return x_channel,x_channel_CSI, x_received, x_received_CSI, h, h_hat
 
 
 def plot_channel_distribution(snr_db=10, n_samples=10000, chann_type="AWGN", K_rician=3):
@@ -77,7 +80,7 @@ def plot_channel_distribution(snr_db=10, n_samples=10000, chann_type="AWGN", K_r
     Affiche l'histogramme du signal reçu après passage dans le canal.
     """
     x = torch.ones(n_samples)  # Signal d'entrée constant (1) pour bien voir l'effet du canal
-    x_channel, _, _, _, _ = channel(x, snr_db, chann_type, K_rician)
+    x_channel, _, _, _, _, _ = channel(x, snr_db, chann_type, K_rician)
 
     x_channel_np = x_channel.numpy()
 
@@ -94,8 +97,8 @@ def plot_channel_distribution(snr_db=10, n_samples=10000, chann_type="AWGN", K_r
         plt.plot(x_range, rayleigh.pdf(x_range, scale=1 / np.sqrt(2)), 'r-', label="Theoretical")
     elif chann_type == "Rician":
         #v = np.sqrt(K_rician)  # Décalage théorique correct
-        b = np.sqrt(2 * K_rician)
-        sigma = 1 / np.sqrt(2)  # Échelle correcte
+        b = np.sqrt(6 * K_rician)
+        sigma = 1 / np.sqrt(6)  # Échelle correcte 
         plt.plot(x_range, rice.pdf(x_range, b, scale=sigma), 'r-', label="Theoretical")
 
     plt.xlabel("Valeur du signal")
@@ -150,7 +153,7 @@ def evaluate_CSI_impact():
         plt.figure(figsize=(8, 5))
 
         for sigma_CSI in sigma_CSI_values:
-            _, _, _, h, h_hat = channel(x, snr, chann_type, K_rician=3, sigma_CSI=sigma_CSI)
+            _, _, _, _, h, h_hat = channel(x, snr, chann_type, K_rician=3, sigma_CSI=sigma_CSI)
             plt.hist(h_hat.numpy(), bins=50, density=True, alpha=0.5, label=f"CSI bruité (σ={sigma_CSI})")
 
         plt.hist(h.numpy(), bins=50, density=True, alpha=0.5, label="h (vrai canal)")
@@ -168,26 +171,28 @@ def plot_channel_distribution_CSI(x, snr_db, chann_type="AWGN", K_rician=3, sigm
     """
     Affiche l'histogramme du signal reçu après passage dans le canal, avec CSI bruité.
     """
-    _, x_received, x_received_csi_bruite, _, _ = channel(x, snr_db, chann_type, K_rician, sigma_CSI)
+    x_channel, x_channel_csi, x_received, x_received_CSI, _, _ = channel(x, snr_db, chann_type, K_rician, sigma_CSI)
 
+    x_channel_np = x_channel.numpy()
+    x_channel_csi_np = x_channel_csi.numpy()
     x_received_np = x_received.numpy()
-    x_received_csi_bruite_np = x_received_csi_bruite.numpy()
+    x_received_CSI_np = x_received_CSI.numpy()
 
     plt.figure(figsize=(8, 5))
-    plt.hist(x_received_np, bins=50, density=True, alpha=0.5, label="Avec CSI parfait")
-    plt.hist(x_received_csi_bruite_np, bins=50, density=True, alpha=0.5, label="Avec CSI bruité")
+    plt.hist(x_channel_np, bins=50, density=True, alpha=0.5, label="Avec CSI parfait")
+    plt.hist(x_channel_csi_np, bins=50, density=True, alpha=0.5, label="Avec CSI bruité")
 
     # Théorie
-    x_range = np.linspace(np.percentile(x_received_np, 1), np.percentile(x_received_np, 99), 1000)
+    x_range = np.linspace(np.percentile(x_channel_np, 1), np.percentile(x_channel_np, 99), 1000)
     
     if chann_type == "AWGN":
-        plt.plot(x_range, norm.pdf(x_range, loc=1, scale=np.sqrt(1 / (2 * snr_db))), 'r-', label="Theoretical")
+        plt.plot(x_range, norm.pdf(x_range, loc=1, scale=np.sqrt(1 / (10 * snr_db))), 'r-', label="Theoretical")
     elif chann_type == "Rayleigh":
         plt.plot(x_range, rayleigh.pdf(x_range, scale=1 / np.sqrt(2)), 'r-', label="Theoretical")
     elif chann_type == "Rician":
         #v = np.sqrt(K_rician)  # Décalage théorique correct
-        b = np.sqrt(2 * K_rician)
-        sigma = 1 / np.sqrt(2)  # Échelle correcte
+        b = np.sqrt(8 * K_rician)
+        sigma = 1 / np.sqrt(8)  # Échelle correcte
         plt.plot(x_range, rice.pdf(x_range, b, scale=sigma), 'r-', label="Theoretical")
 
 
