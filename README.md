@@ -15,11 +15,12 @@ Instead of assuming ideal AWGN channels, we integrate **fading models** (Rayleig
 📂 DeepComm-Autoencoder-Realistic-Channels 
 │── 📄 README.md # Project documentation 
 │── 📄 requirements.txt # Dependencies
-│── 📄 train.py # Main training script
+│── 📄 channel.py # Simulates channels
 │── 📄 models.py # Neural network architectures 
-│── 📄 channel.py # Simulates channels 
-│── 📄 modulation.py # Adds modulation constraints 
-│── 📄 utils.py # Utility functions 
+│── 📄 train.py # Main training script
+│── 📄 utils.py # Utility functions
+│── 📄 Com_System.py # Simulates an OFDM communication system with QAM modulation
+│── 📄 modulation.py # Adds modulation constraints
 │── 📂 checkpoints # Folder to store weights after training
 │── 📂 experiments # Training and evaluation scripts 
 └── 📂 results # Plots, logs, and trained models 

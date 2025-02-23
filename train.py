@@ -19,7 +19,7 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 train = True
 
-def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value):
+def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, sigma_CSI = 0.5):
 
     
     k = math.log2(m)   # Get k Number of bits necessary to transmit the m messages
@@ -68,7 +68,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
                 break
 
             ### Passage du message par le canal 
-            data_channel = channel(encoded_data, snr_db, chann_type=chann_type)
+            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=sigma_CSI)
             data_channel = torch.clamp(data_channel, -1e5, 1e5)  # Ajustez les bornes si nécessaire
             if torch.isnan(data_channel).any():
                 print("NaN detected after channel. Epoch: %d" % (epoch))
@@ -122,7 +122,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             last_losses = np.array(losses[-10:])
             print('les 10 dernières valeurs de perte :', last_losses)
             if np.all(last_losses < stop_value):
-                print("Le modele a converge.")
+                print("Le modele a converge après %d epochs." % (epoch))
             else:
                 print("L'entrainement continue.")
 
@@ -184,7 +184,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     return encoder, decoder, errors
 
-def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples=10000):
+def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples=10000, sigma_CSI=0.5):
     """
     Évalue l'autoencodeur en mesurant le BER sur un grand nombre d'exemples.
     """
@@ -200,7 +200,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
         encoded = encoder(message)
 
         # Appliquer le canal en appelant directement la fonction `channel()`
-        received = channel(encoded, n, k, snr_db, chann_type)
+        _, received, _, _, _, _ = channel(encoded, n, k, snr_db, chann_type, sigma_CSI)
 
         # Decoder le message
         decoded = decoder(received)
@@ -227,7 +227,7 @@ def plot_training_loss(losses):
     plt.show()
 
 if train:
-    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="Rician", batch_size=64, n_epochs=10000, lr=0.001,
-                                clipping=0.5, plot=10, stop_value=0.005)    
+    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="AWGN", batch_size=64, n_epochs=10000, lr=0.001,
+                                clipping=0.5, plot=10, stop_value=0.005, sigma_CSI=0.5)    
     
-    plot_training_loss(errors)  # Affichage de l'évolution de la perte
+    plot_training_loss(errors)  # Affichage de l'évolution de la perte 

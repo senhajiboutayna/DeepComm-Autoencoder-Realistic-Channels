@@ -214,4 +214,4 @@ def plot_channel_distribution_CSI(x, snr_db, chann_type="AWGN", K_rician=3, sigm
 #plot_fading_distributions()
 
 #Test avec un CSI bruité
-evaluate_CSI_impact()
+#evaluate_CSI_impact()
