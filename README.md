@@ -16,11 +16,11 @@ Instead of assuming ideal AWGN channels, we integrate **fading models** (Rayleig
 │── 📄 README.md # Project documentation 
 │── 📄 requirements.txt # Dependencies
 │── 📄 channel.py # Simulates channels
+│── 📄 com_System.py # Simulates an OFDM communication system with QAM modulation
 │── 📄 models.py # Neural network architectures 
+│── 📄 modulation.py # Adds modulation constraints
 │── 📄 train.py # Main training script
 │── 📄 utils.py # Utility functions
-│── 📄 Com_System.py # Simulates an OFDM communication system with QAM modulation
-│── 📄 modulation.py # Adds modulation constraints
 │── 📂 checkpoints # Folder to store weights after training
 │── 📂 experiments # Training and evaluation scripts 
 └── 📂 results # Plots, logs, and trained models 
