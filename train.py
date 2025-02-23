@@ -12,6 +12,7 @@ from IPython.utils import io
 from IPython import display
 
 from channel import channel
+from com_System import evaluate_ofdm
 from models import Encoder, Decoder
 from utils import MemoryMessages, count_errors
 
@@ -194,10 +195,14 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     for _ in range(n_samples):
         # Générer un message aléatoire
-        message = torch.randint(0, m, (1,)).to(device)
+        message = torch.randint(0, m, (1, 1)).to(device)
+        message = message.unsqueeze(0)  # Ajouter une dimension pour obtenir la forme (1, 1)
+        message = message.long()  # Convertir en float si nécessaire
 
         # Encoder le message
         encoded = encoder(message)
+        encoded = encoded.view(1, -1)
+        print(f"Encoded shape: {encoded.shape}")
 
         # Appliquer le canal en appelant directement la fonction `channel()`
         _, received, _, _, _, _ = channel(encoded, n, k, snr_db, chann_type, sigma_CSI)
@@ -211,7 +216,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     ber = errors / n_samples
     print(f"BER (SNR={snr_db} dB, Canal={chann_type}): {ber:.6f}")
-    return ber
+    return ber, snr_db
 
 def plot_training_loss(losses):
     """
@@ -231,3 +236,31 @@ if train:
                                 clipping=0.5, plot=10, stop_value=0.005, sigma_CSI=0.5)    
     
     plot_training_loss(errors)  # Affichage de l'évolution de la perte 
+
+# Évaluation de l'autoencodeur
+ber_autoencoder, snr_db = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=7, chann_type="AWGN", n_samples=1000, sigma_CSI=0.5)
+print(f"BER de l'autoencodeur (SNR= {snr_db} dB, Canal=AWGN): {ber_autoencoder:.6f}")
+
+snr_values = np.arange(0, 25, 5)  # Exemple de valeurs de SNR
+ber_autoencoder_list = []
+ber_ofdm_list = []
+
+for snr in snr_values:
+    # Évaluation de l'autoencodeur
+    ber_autoencoder = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="AWGN", n_samples=1000, sigma_CSI=0.5)
+    ber_autoencoder_list.append(ber_autoencoder)
+    
+    # Évaluation du système OFDM
+    # Vous devez ajuster le code OFDM pour accepter un SNR variable
+    ber_ofdm = evaluate_ofdm(snr)  # Vous devez implémenter cette fonction
+    ber_ofdm_list.append(ber_ofdm)
+
+plt.figure(figsize=(10, 6))
+plt.semilogy(snr_values, ber_autoencoder_list, 'bo-', label='Autoencodeur')
+plt.semilogy(snr_values, ber_ofdm_list, 'ro-', label='OFDM')
+plt.xlabel('SNR (dB)')
+plt.ylabel('BER')
+plt.title('Comparaison des Performances entre Autoencodeur et OFDM')
+plt.grid(True)
+plt.legend()
+plt.show()
