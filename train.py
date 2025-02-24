@@ -185,38 +185,58 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     return encoder, decoder, errors
 
-def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples=10000, sigma_CSI=0.5):
+def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples, sigma_CSI=0.5):
     """
-    Évalue l'autoencodeur en mesurant le BER sur un grand nombre d'exemples.
+    Évalue les performances de l'autoencodeur en termes de taux d'erreur binaire (BER).
+
+    Args:
+        encoder (nn.Module): Le modèle de l'encodeur.
+        decoder (nn.Module): Le modèle du décodeur.
+        m (int): Nombre de messages possibles.
+        n (int): Dimension du signal encodé.
+        k (int): Nombre de bits par message.
+        snr_db (float): Rapport signal sur bruit en dB.
+        chann_type (str): Type de canal (par exemple, "AWGN").
+        n_samples (int): Nombre d'échantillons à utiliser pour l'évaluation.
+        sigma_CSI (float): Paramètre de variance pour le canal.
+
+    Returns:
+        float: Le taux d'erreur binaire (BER) calculé.
     """
-    encoder.eval()
-    decoder.eval()
-    errors = 0
+    encoder.eval()  # Mettre l'encodeur en mode évaluation
+    decoder.eval()  # Mettre le décodeur en mode évaluation
 
-    for _ in range(n_samples):
-        # Générer un message aléatoire
-        message = torch.randint(0, m, (1, 1)).to(device)
-        message = message.unsqueeze(0)  # Ajouter une dimension pour obtenir la forme (1, 1)
-        message = message.long()  # Convertir en float si nécessaire
+    total_errors = 0
+    total_bits = 0
 
-        # Encoder le message
-        encoded = encoder(message)
-        encoded = encoded.view(1, -1)
-        print(f"Encoded shape: {encoded.shape}")
+    with torch.no_grad():  # Désactiver le calcul du gradient pour l'évaluation
+        for _ in range(n_samples):
+            # Générer un message aléatoire
+            message = np.random.randint(0, m, size=(n,))
+            message_tensor = torch.from_numpy(message)
+            message_tensor = message_tensor.unsqueeze(1)
+            message_tensor = message_tensor.to(device)
 
-        # Appliquer le canal en appelant directement la fonction `channel()`
-        _, received, _, _, _, _ = channel(encoded, n, k, snr_db, chann_type, sigma_CSI)
+            # Encoder le message
+            encoded_data = encoder(message_tensor)
 
-        # Decoder le message
-        decoded = decoder(received)
-        predicted = torch.argmax(decoded, dim=1)
+            # Passer le message encodé à travers le canal
+            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=sigma_CSI)
 
-        # Compter les erreurs
-        errors += (predicted != message).sum().item()
+            # Décoder le message
+            decoded_data = decoder(data_channel)
 
-    ber = errors / n_samples
-    print(f"BER (SNR={snr_db} dB, Canal={chann_type}): {ber:.6f}")
+            # Convertir la sortie du décodeur en prédiction
+            predicted_message = torch.argmax(decoded_data, dim=1).cpu().numpy()
+
+            # Compter les erreurs
+            total_errors += np.sum(predicted_message != message)
+            total_bits += k  # Chaque message contient k bits
+
+    # Calculer le BER
+    ber = total_errors / total_bits
     return ber, snr_db
+    
 
 def plot_training_loss(losses):
     """
