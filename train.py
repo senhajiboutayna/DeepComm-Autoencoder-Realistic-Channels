@@ -8,9 +8,6 @@ import math
 
 import matplotlib.pyplot as plt
 
-from IPython.utils import io
-from IPython import display
-
 from channel import channel
 from com_System import evaluate_ofdm
 from models import Encoder, Decoder
@@ -253,21 +250,21 @@ def plot_training_loss(losses):
 
 if train:
     encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="AWGN", batch_size=64, n_epochs=10000, lr=0.001,
-                                clipping=0.5, plot=10, stop_value=0.005, sigma_CSI=0.5)    
+                                clipping=0.5, plot=10, stop_value=0.005, sigma_CSI=0.0)    
     
     plot_training_loss(errors)  # Affichage de l'évolution de la perte 
 
 # Évaluation de l'autoencodeur
-ber_autoencoder, snr_db = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=7, chann_type="AWGN", n_samples=1000, sigma_CSI=0.5)
+ber_autoencoder, snr_db = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=7, chann_type="AWGN", n_samples=10000, sigma_CSI=0.0)
 print(f"BER de l'autoencodeur (SNR= {snr_db} dB, Canal=AWGN): {ber_autoencoder:.6f}")
 
-snr_values = np.arange(0, 25, 5)  # Exemple de valeurs de SNR
+snr_values = np.arange(-4, 10, 1)  # Exemple de valeurs de SNR
 ber_autoencoder_list = []
 ber_ofdm_list = []
 
 for snr in snr_values:
     # Évaluation de l'autoencodeur
-    ber_autoencoder = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="AWGN", n_samples=1000, sigma_CSI=0.5)
+    ber_autoencoder, _ = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="AWGN", n_samples=10000, sigma_CSI=0.0)
     ber_autoencoder_list.append(ber_autoencoder)
     
     # Évaluation du système OFDM
@@ -276,8 +273,8 @@ for snr in snr_values:
     ber_ofdm_list.append(ber_ofdm)
 
 plt.figure(figsize=(10, 6))
-plt.semilogy(snr_values, ber_autoencoder_list, 'bo-', label='Autoencodeur')
-plt.semilogy(snr_values, ber_ofdm_list, 'ro-', label='OFDM')
+plt.semilogy(snr_values, ber_autoencoder_list, 'b', label='Autoencodeur')
+plt.semilogy(snr_values, ber_ofdm_list, 'r', label='OFDM')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
 plt.title('Comparaison des Performances entre Autoencodeur et OFDM')

@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.special import erfc
 
-def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16, K_rician=3):
+def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16, K_rician=3, use_ldpc=True):
     """
     Évalue le système OFDM pour un SNR donné et retourne le BER.
     
@@ -13,10 +14,20 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16,
         K (int): Nombre de sous-porteuses OFDM.
         CP (int): Longueur du préfixe cyclique.
         K_rician (float): Facteur de Rician pour le canal Rician.
+        use_ldpc (bool): Active/Désactive le codage correcteur d'erreur (LDPC).
     
     Retour:
         ber (float): Taux d'erreur binaire (BER) calculé.
     """
+
+    # Sélection dynamique du MCS (Modulation and Coding Scheme)
+    if snr_db < 5:
+        M = 4  # QPSK
+    elif snr_db < 11:
+        M = 16  # 16-QAM
+    else:
+        M = 64  # 64-QAM
+
     # OFDM Parameters
     K = 64  # Number of OFDM subcarriers
     CP = K // 4  # Length of the cyclic prefix (25% of the block) -> 16
@@ -98,7 +109,6 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16,
         return h
 
     # Modulation Parameters
-    M = 16  # QAM order
     bits_per_symbol = int(np.log2(M))
     payloadBits_per_OFDM = len(dataCarriers) * bits_per_symbol
     num_total_bits = num_symbols * payloadBits_per_OFDM
@@ -107,8 +117,17 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16,
     print ("First 20 bits: ", bits[:20])
     print ("Mean of bits (should be around 0.5): ", np.mean(bits))
 
+    # Codage correcteur d'erreur (LDPC)
+    if use_ldpc:
+        encoded_bits = np.repeat(bits, 2)  # Simplification d'un codage LDPC (x2 bits)
+        encoded_bits = encoded_bits[:num_total_bits]  # S'assurer que la taille reste correcte
+    else:
+        encoded_bits = bits
+
     # QAM Mapping
-    symbols = qam_mod(bits, M)
+    symbols = qam_mod(encoded_bits, M)
+    expected_size = num_symbols * len(dataCarriers)
+    symbols = symbols[:expected_size]  # Tronquer si nécessaire
     symbols = symbols.reshape(num_symbols, len(dataCarriers))
 
     # Create OFDM Frame
@@ -144,17 +163,16 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16,
     else:
         raise ValueError(f"Type de canal non supporté: {chann_type}") 
 
+    # Passage par le canal
+    h = h[np.newaxis, :]
+    h = np.tile(h, (num_symbols, 1))
+    ofdm_rx = ofdm_tx[:, CP:] * h 
 
     # Adding AWGN Noise
     snr_linear = 10 ** (snr_db / 10)
     noise_power = np.mean(np.abs(ofdm_tx)**2) / snr_linear
     noise = np.sqrt(noise_power / 2) * (np.random.randn(*ofdm_tx.shape) + 1j * np.random.randn(*ofdm_tx.shape))
     ofdm_rx = ofdm_tx + noise
-
-    # Passage of signal through the channel
-    h = h[np.newaxis, :]  # Changes the shape from (64,) to (1, 64)
-    h = np.tile(h, (num_symbols, 1))  # Replicates the channel on all OFDM frames
-    ofdm_rx[:, CP:] *= h  # Apply the channel to subcarriers only
 
     # Visualization of noisy signal
     plt.figure(figsize=(8,4))
@@ -178,7 +196,12 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16,
     # Demodulation
     bits_rx = qam_demod(symbols_rx_data.flatten(), M)
 
+    # Décodage LDPC (si activé)
+    if use_ldpc:
+        bits_rx = bits_rx[::2]  # Suppression du doublage de bits
+
     # Calculation of BER
+    bits = bits[:bits_rx.shape[0]]  # Tronquer bits à la même longueur que bits_rx
     ber = np.mean(bits != bits_rx)
     print(f"BER (OFDM + {M}-QAM + {chann_type.upper()}, SNR={snr_db} dB) : {ber:.6f}")
 
@@ -193,3 +216,23 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16,
     #plt.show()
 
     return ber
+
+"""
+# Test du système OFDM
+snr_range = np.arange(-4, 10, 1)
+ber_values_awgn = [evaluate_ofdm(snr, "AWGN", use_ldpc=True) for snr in snr_range]
+ber_values_rayleigh = [evaluate_ofdm(snr, "Rayleigh", use_ldpc=True) for snr in snr_range]
+ber_values_rician = [evaluate_ofdm(snr, "Rician", use_ldpc=True) for snr in snr_range]
+
+# Affichage du BER vs SNR
+plt.figure(figsize=(8,5))
+plt.semilogy(snr_range, ber_values_awgn, 'r-o', label="OFDM AWGN")
+plt.semilogy(snr_range, ber_values_rayleigh, 'g-s', label="OFDM Rayleigh")
+plt.semilogy(snr_range, ber_values_rician, 'b-d', label="OFDM Rician")
+plt.xlabel("SNR (dB)")
+plt.ylabel("BER")
+plt.legend()
+plt.grid()
+plt.title("Performance OFDM avec Codage LDPC")
+plt.show()
+"""

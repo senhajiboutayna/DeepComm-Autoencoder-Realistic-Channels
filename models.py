@@ -37,7 +37,12 @@ class Encoder(nn.Module):
         x = self.linear_M(x)
         x = self.linear_N(x.squeeze())
         y = self.normalization(x)
-
+        y = y / torch.sqrt(torch.mean(y ** 2))    # Power normalization
+        """
+        Currently, BatchNorm1d is used, but in a real case, the signal must respect a power constraint.
+        Idea: Force an average power of 1 with explicit normalization
+        This will ensure that the transmitter does not exceed the permitted power.
+        """
         return y
 
 
