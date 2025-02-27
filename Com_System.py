@@ -105,6 +105,8 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, 
 
         symbols = constellation[indices]
         symbols /= np.sqrt((np.mean(np.abs(symbols) ** 2)))
+
+        print(f"Indices QAM min: {indices.min()}, max: {indices.max()}, M={M}")
     
         return symbols
 
@@ -165,6 +167,12 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, 
     noise = np.sqrt(noise_power / 2) * (np.random.randn(*ofdm_tx.shape) + 1j * np.random.randn(*ofdm_tx.shape))
     ofdm_rx = ofdm_tx + noise
 
+    signal_power = np.var(ofdm_tx)
+    noise_power = np.var(noise)
+    snr_measured = 10 * np.log10(signal_power / noise_power)
+    print(f"SNR théorique: {snr_db} dB, SNR mesuré: {snr_measured:.2f} dB")
+
+
     # Add phase noise (Doppler)
     ofdm_rx = apply_doppler_effect(ofdm_rx, doppler_freq, sf=K)
 
@@ -172,26 +180,27 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, 
     ofdm_rx = ofdm_rx[:, CP:]
 
     # FFT reception
-    symbols_rx = np.fft.fft(ofdm_rx, axis=1) / h  # Equalization (Division by the channel response) - Égalisation
+    symbols_rx = (np.fft.fft(ofdm_rx, axis=1) * h.conj()) / (np.abs(h)**2 + 1e-6) # Equalization (Division by the channel response) - Égalisation
 
     # Demodulation
     bits_rx = qam_demod(symbols_rx.flatten(), M)
 
     # LDPC decoding (if enabled).
     if use_ldpc:
-        bits_rx = pyldpc.decode(H, bits_rx, snr_db) 
+        bits_rx = pyldpc.decode(H, bits_rx, snr_db, maxiter=100) 
 
     # Calculation of BER
     bits = bits[:len(bits_rx)]  # Tronquer bits à la même longueur que bits_rx
     ber = np.mean(bits != bits_rx)
     print(f"BER (OFDM + {M}-QAM + {chann_type.upper()}, SNR={snr_db} dB) : {ber:.6f}")
-
+    
     # Display of received constellation
     plt.figure(figsize=(6,6))
-    plt.scatter(symbols_rx.flatten().real, symbols_rx.flatten().imag, marker='o', color='r', alpha=0.3)
-    plt.scatter(symbols.real, symbols.imag, marker='x', color='b', alpha=0.5)
+    plt.scatter(symbols.flatten().real, symbols.flatten().imag, marker='x', color='b', alpha=0.5, label="Émis")
+    plt.scatter(symbols_rx.flatten().real, symbols_rx.flatten().imag, marker='o', color='r', alpha=0.3, label="Reçu")
     plt.xlabel("In-phase")
     plt.ylabel("Quadrature")
+    plt.legend()
     plt.title(f"Constellation Reçue ({M}-QAM, {chann_type} Channel, SNR={snr_db} dB)")
     plt.grid()
     plt.show()
@@ -199,20 +208,4 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, 
     return ber
 
 
-# OFDM system test
-snr_range = np.arange(2, 15, 5)
-ber_values_awgn = [evaluate_ofdm(snr, "AWGN", doppler_freq=1, use_ldpc=True) for snr in snr_range]
-ber_values_rayleigh = [evaluate_ofdm(snr, "Rayleigh", doppler_freq=1, use_ldpc=True) for snr in snr_range]
-ber_values_rician = [evaluate_ofdm(snr, "Rician", doppler_freq=1, use_ldpc=True) for snr in snr_range]
 
-# Affichage du BER vs SNR
-plt.figure(figsize=(8,5))
-plt.semilogy(snr_range, ber_values_awgn, 'r-o', label="OFDM AWGN")
-plt.semilogy(snr_range, ber_values_rayleigh, 'g-s', label="OFDM Rayleigh")
-plt.semilogy(snr_range, ber_values_rician, 'b-d', label="OFDM Rician")
-plt.xlabel("SNR (dB)")
-plt.ylabel("BER")
-plt.legend()
-plt.grid()
-plt.title("Performance OFDM avec Codage LDPC")
-plt.show()

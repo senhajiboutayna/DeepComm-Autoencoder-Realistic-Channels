@@ -255,21 +255,21 @@ if train:
     plot_training_loss(errors)  # Affichage de l'évolution de la perte 
 
 # Évaluation de l'autoencodeur
-ber_autoencoder, snr_db = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=7, chann_type="AWGN", n_samples=10000, sigma_CSI=0.0)
+ber_autoencoder, snr_db = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=7, chann_type="AWGN", n_samples=10000, sigma_CSI=0.5)
 print(f"BER de l'autoencodeur (SNR= {snr_db} dB, Canal=AWGN): {ber_autoencoder:.6f}")
 
-snr_values = np.arange(-4, 10, 1)  # Exemple de valeurs de SNR
+snr_values = np.arange(2, 15, 5)  # Exemple de valeurs de SNR
 ber_autoencoder_list = []
 ber_ofdm_list = []
 
 for snr in snr_values:
     # Évaluation de l'autoencodeur
-    ber_autoencoder, _ = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="AWGN", n_samples=10000, sigma_CSI=0.0)
+    ber_autoencoder, _ = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="AWGN", n_samples=10000, sigma_CSI=0.5)
     ber_autoencoder_list.append(ber_autoencoder)
     
     # Évaluation du système OFDM
     # Vous devez ajuster le code OFDM pour accepter un SNR variable
-    ber_ofdm = evaluate_ofdm(snr, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16, K_rician=3, use_ldpc=True)  # Vous devez implémenter cette fonction
+    ber_ofdm = evaluate_ofdm(snr, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, K_rician=3, doppler_freq=1, use_ldpc=True)  # Vous devez implémenter cette fonction
     ber_ofdm_list.append(ber_ofdm)
 
 plt.figure(figsize=(10, 6))
