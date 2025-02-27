@@ -269,7 +269,7 @@ for snr in snr_values:
     
     # Évaluation du système OFDM
     # Vous devez ajuster le code OFDM pour accepter un SNR variable
-    ber_ofdm = evaluate_ofdm(snr)  # Vous devez implémenter cette fonction
+    ber_ofdm = evaluate_ofdm(snr, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16, K_rician=3, use_ldpc=True)  # Vous devez implémenter cette fonction
     ber_ofdm_list.append(ber_ofdm)
 
 plt.figure(figsize=(10, 6))

@@ -1,83 +1,110 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import erfc
+import pyldpc
 
-def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16, K_rician=3, use_ldpc=True):
+def generate_ldpc_code(n, k):
     """
-    Évalue le système OFDM pour un SNR donné et retourne le BER.
+    Generates an LDPC matrix (H) and a generator matrix (G).
     
-    Paramètres:
-        snr_db (float): SNR en dB.
-        chann_type (str): Type de canal ("AWGN", "Rayleigh", "Rician").
-        num_symbols (int): Nombre de symboles OFDM à générer.
-        M (int): Ordre de la modulation QAM.
-        K (int): Nombre de sous-porteuses OFDM.
-        CP (int): Longueur du préfixe cyclique.
-        K_rician (float): Facteur de Rician pour le canal Rician.
-        use_ldpc (bool): Active/Désactive le codage correcteur d'erreur (LDPC).
+    n: Total number of bits (code length).
+    k : Number of information bits.
     
-    Retour:
-        ber (float): Taux d'erreur binaire (BER) calculé.
+    Returns H (parity check matrix) and G (generator matrix).
+    """
+    d_v = 3  # Degree of control bits
+    d_c = 6  # Degree of parity bits
+
+    # Correction: Adapt n to be a multiple of d_c
+    n = (n // d_c + 1) * d_c if n % d_c != 0 else n
+
+    H, G = pyldpc.make_ldpc(n, d_v, d_c, systematic=True, sparse=True)
+    return H, G
+
+def apply_doppler_effect(symbols, doppler_freq, sf):
+    """
+    Applies Doppler phase noise to an OFDM signal to simulate a mobile channel.
+    
+    doppler_freq: Doppler frequency (Hz).
+    sf : Sampling frequency.
+    """
+    if doppler_freq == 0:
+        return symbols  # No Doppler
+    n = symbols.shape[1]
+    t = np.arange(n) / sf
+    phase_shift = np.exp(1j * 2 * np.pi * doppler_freq * t)
+    return symbols * phase_shift
+
+
+def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, K_rician=3, doppler_freq=0, use_ldpc=False):
+    """
+    Simulates an OFDM system with channel and adaptive modulation.
+    
+    Parameters:
+        snr_db (float): SNR in dB.
+        chann_type (str): Channel type (“AWGN”, “Rayleigh”, “Rician”).
+        num_symbols (int): Number of OFDM symbols.
+        M (int): QAM modulation order.
+        K (int): Number of OFDM subcarriers.
+        CP (int): Cyclic prefix length, (25% of the block k) -> 16
+        K_rician (float): Rician channel K factor.
+        doppler_freq (float): Doppler frequency to simulate a mobile channel.
+        use_ldpc (bool): Use LDPC coding.
+    
+    Return:
+        ber (float): Bit error rate.
     """
 
-    # Sélection dynamique du MCS (Modulation and Coding Scheme)
+    # Adapting the modulation scheme to the SNR
     if snr_db < 5:
         M = 4  # QPSK
     elif snr_db < 11:
         M = 16  # 16-QAM
     else:
         M = 64  # 64-QAM
+    
+    # Modulation Parameters
+    bits_per_symbol = int(np.log2(M))
+    num_bits = num_symbols * K * bits_per_symbol
+    bits = np.random.randint(0, 2, num_bits)   # Generate random bits
+    print ("Bits count: ", len(bits))
+    print ("Mean of bits (should be around 0.5): ", np.mean(bits))
 
-    # OFDM Parameters
-    K = 64  # Number of OFDM subcarriers
-    CP = K // 4  # Length of the cyclic prefix (25% of the block) -> 16
-    P = CP // 2  # Number of pilot carriers per OFDM block
-    pilotValue = 3 + 3j  # Known value transmitted by pilots
-    snr_db = 25  # SNR in dB
-    num_symbols = 100  # Number of OFDM symbols
-    K_rician = 3  # Rician factor for the channel
-
-    # Define the indices of the subcarriers
-    allCarriers = np.arange(K)
-    pilotCarriers = allCarriers[::K // P]
-    pilotCarriers = np.hstack([pilotCarriers, np.array([allCarriers[-1]])])
-    P = len(pilotCarriers)
-    dataCarriers = np.delete(allCarriers, pilotCarriers)
-    print ("allCarriers:   %s" % allCarriers)
-    print ("pilotCarriers: %s" % pilotCarriers)
-    print ("dataCarriers:  %s" % dataCarriers)
-
-    # Visualization of subcarriers
-    plt.figure(figsize=(8,4))
-    plt.plot(pilotCarriers, np.zeros_like(pilotCarriers), 'bo', label='Pilots')
-    plt.plot(dataCarriers, np.zeros_like(dataCarriers), 'ro', label='Data')
-    plt.xlabel("Subcarrier Index")
-    plt.ylabel("Magnitude")
-    plt.title("OFDM Subcarrier Allocation")
-    plt.legend()
-    plt.grid()
-    #plt.show()
+    # LDPC coding (if enabled)   
+    if use_ldpc:
+        H, G = generate_ldpc_code(n=num_bits, k=num_bits // 2)
+        k_ldpc = G.shape[1]  # Number of information bits expected by G
+        bits_input = bits[:k_ldpc]  # Adjust bit size
+        bits = pyldpc.encode(G, bits_input, snr_db)
+        bits = (bits > 0.5).astype(int)  # Convert to binary (0 or 1)
 
     # QAM Modulation
     def qam_mod(bits, M):
         """QAM modulation with Gray mapping"""
         k = int(np.log2(M))
+        # Ajustement pour que bits soit un multiple de k
+        extra_bits = bits.size % k
+        if extra_bits != 0:
+            print(f"Avertissement: Tronquage de {extra_bits} bits pour correspondre à QAM-{M}")
+            bits = bits[:bits.size - extra_bits]
+
         bits = bits.reshape(-1, k)
         I_levels = np.arange(-np.sqrt(M) + 1, np.sqrt(M), 2)
         Q_levels = np.arange(-np.sqrt(M) + 1, np.sqrt(M), 2)
         constellation = np.array([i + 1j * q for i in I_levels for q in Q_levels])
-        indices = np.dot(bits, 2**np.arange(k)[::-1])
+        """
+        # Vérifier que bits contient uniquement 0 et 1
+        if not np.all((bits == 0) | (bits == 1)):
+            raise ValueError("Erreur: les bits fournis à qam_mod() ne sont pas binaires !")
+        """
+        indices = np.dot(bits, 2**np.arange(k)[::-1]).astype(int)
+
+        # Check that the indices are in  [0, M-1]
+        if np.any(indices < 0) or np.any(indices >= M):
+            raise ValueError(f"Erreur: Indices hors limites. Min: {indices.min()}, Max: {indices.max()}, M={M}")
+
         symbols = constellation[indices]
-        symbols /= np.sqrt((np.mean(np.abs(constellation) ** 2)))
-    
-        # Visualization of the QAM constellation
-        plt.figure(figsize=(6,6))
-        plt.scatter(symbols.real, symbols.imag, marker='x', color='b')
-        plt.xlabel("In-phase")
-        plt.ylabel("Quadrature")
-        plt.title(f"{M}-QAM Constellation")
-        plt.grid()
-        #plt.show()
+        symbols /= np.sqrt((np.mean(np.abs(symbols) ** 2)))
     
         return symbols
 
@@ -93,77 +120,41 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16,
         return bits_rx.flatten()
 
     # Channel Generation Functions
-    def awgn_channel(N_subcarriers):
-        """Generates an AWGN channel"""
-        return np.ones(N_subcarriers)
+    if chann_type == "AWGN":
+        h = np.ones(K)
 
-    def rayleigh_channel(N_subcarriers):
-        """Generates a Rayleigh fading channel"""
-        return (np.random.randn(N_subcarriers) + 1j * np.random.randn(N_subcarriers)) / np.sqrt(2)
-
-    def rician_channel(N_subcarriers, K):
-        """Generates a Rician fading channel with factor K"""
-        h_los = np.ones(N_subcarriers)
-        h_nlos = (np.random.randn(N_subcarriers) + 1j * np.random.randn(N_subcarriers)) / np.sqrt(2)
-        h = np.sqrt(K / (K + 1)) * h_los + np.sqrt(1 / (K + 1)) * h_nlos
-        return h
-
-    # Modulation Parameters
-    bits_per_symbol = int(np.log2(M))
-    payloadBits_per_OFDM = len(dataCarriers) * bits_per_symbol
-    num_total_bits = num_symbols * payloadBits_per_OFDM
-    bits = np.random.randint(0, 2, size=num_total_bits)
-    print ("Bits count: ", len(bits))
-    print ("First 20 bits: ", bits[:20])
-    print ("Mean of bits (should be around 0.5): ", np.mean(bits))
-
-    # Codage correcteur d'erreur (LDPC)
-    if use_ldpc:
-        encoded_bits = np.repeat(bits, 2)  # Simplification d'un codage LDPC (x2 bits)
-        encoded_bits = encoded_bits[:num_total_bits]  # S'assurer que la taille reste correcte
+    elif chann_type == "Rayleigh":
+        h = (np.random.randn(K) + 1j * np.random.randn(K)) / np.sqrt(2)
+    
+    elif chann_type == "Rician":
+        h_los = np.ones(K)
+        h_nlos = (np.random.randn(K) + 1j * np.random.randn(K)) / np.sqrt(2)
+        h = np.sqrt(K_rician / (K_rician + 1)) * h_los + np.sqrt(1 / (K_rician + 1)) * h_nlos
     else:
-        encoded_bits = bits
+        raise ValueError(f"Type de canal non supporté: {chann_type}")
 
     # QAM Mapping
-    symbols = qam_mod(encoded_bits, M)
-    expected_size = num_symbols * len(dataCarriers)
-    symbols = symbols[:expected_size]  # Tronquer si nécessaire
-    symbols = symbols.reshape(num_symbols, len(dataCarriers))
+    symbols = qam_mod(bits, M)
+    ##expected_size = num_symbols * len(dataCarriers)
+    ##symbols = symbols[:expected_size]  # Tronquer si nécessaire
+    expected_size = num_symbols * K  # Taille correcte attendue
 
-    # Create OFDM Frame
-    ofdm_frame = np.zeros((num_symbols, K), dtype=complex)
-    ofdm_frame[:, dataCarriers] = symbols
-    ofdm_frame[:, pilotCarriers] = pilotValue
+    if symbols.size < expected_size:
+        raise ValueError(f"Erreur: Pas assez de symboles ({symbols.size}) pour remplir ({num_symbols}, {K})")
+    elif symbols.size > expected_size:
+        print(f"Avertissement: Tronquage de {symbols.size} → {expected_size} pour correspondre à ({num_symbols}, {K})")
+        symbols = symbols[:expected_size]  # Truncate the excess
+
+    symbols = symbols.reshape(num_symbols, K)
 
     # IFFT Transformation (Time Domain Conversion)
-    ofdm_symbols = np.fft.ifft(ofdm_frame, axis=1)
-
-    # Visualization of OFDM symbols
-    plt.figure(figsize=(8,4))
-    plt.plot(abs(ofdm_symbols[0]), label='OFDM Symbol Magnitude')
-    plt.xlabel("Subcarrier Index")
-    plt.ylabel("Magnitude")
-    plt.title("OFDM Symbol Representation")
-    plt.grid()
-    plt.legend()
-    #plt.show()
+    ofdm_symbols = np.fft.ifft(symbols, axis=1)
 
     # Adding Cyclic Prefix
     cp = ofdm_symbols[:, -CP:]
     ofdm_tx = np.hstack([cp, ofdm_symbols])
 
-    # Selection of the channel
-    chann_type = "AWGN"  
-    if chann_type == "AWGN":
-        h = awgn_channel(K)  
-    elif chann_type == "Rayleigh":
-        h = rayleigh_channel(K)  
-    elif chann_type == "Rician":
-        h = rician_channel(K, K_rician)  
-    else:
-        raise ValueError(f"Type de canal non supporté: {chann_type}") 
-
-    # Passage par le canal
+    # Passage through the channel
     h = h[np.newaxis, :]
     h = np.tile(h, (num_symbols, 1))
     ofdm_rx = ofdm_tx[:, CP:] * h 
@@ -174,15 +165,8 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16,
     noise = np.sqrt(noise_power / 2) * (np.random.randn(*ofdm_tx.shape) + 1j * np.random.randn(*ofdm_tx.shape))
     ofdm_rx = ofdm_tx + noise
 
-    # Visualization of noisy signal
-    plt.figure(figsize=(8,4))
-    plt.plot(abs(ofdm_rx[0]), label='Received OFDM Symbol')
-    plt.xlabel("Time Sample Index")
-    plt.ylabel("Magnitude")
-    plt.title("Received OFDM Symbol with Noise")
-    plt.grid()
-    plt.legend()
-    #plt.show()
+    # Add phase noise (Doppler)
+    ofdm_rx = apply_doppler_effect(ofdm_rx, doppler_freq, sf=K)
 
     # Deletion of cyclic prefix
     ofdm_rx = ofdm_rx[:, CP:]
@@ -190,39 +174,36 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=100, M=16, K=64, CP=16,
     # FFT reception
     symbols_rx = np.fft.fft(ofdm_rx, axis=1) / h  # Equalization (Division by the channel response) - Égalisation
 
-    # Extraction of useful data (without pilots)
-    symbols_rx_data = symbols_rx[:, dataCarriers]
-
     # Demodulation
-    bits_rx = qam_demod(symbols_rx_data.flatten(), M)
+    bits_rx = qam_demod(symbols_rx.flatten(), M)
 
-    # Décodage LDPC (si activé)
+    # LDPC decoding (if enabled).
     if use_ldpc:
-        bits_rx = bits_rx[::2]  # Suppression du doublage de bits
+        bits_rx = pyldpc.decode(H, bits_rx, snr_db) 
 
     # Calculation of BER
-    bits = bits[:bits_rx.shape[0]]  # Tronquer bits à la même longueur que bits_rx
+    bits = bits[:len(bits_rx)]  # Tronquer bits à la même longueur que bits_rx
     ber = np.mean(bits != bits_rx)
     print(f"BER (OFDM + {M}-QAM + {chann_type.upper()}, SNR={snr_db} dB) : {ber:.6f}")
 
     # Display of received constellation
     plt.figure(figsize=(6,6))
-    plt.scatter(symbols_rx_data.flatten().real, symbols_rx_data.flatten().imag, marker='o', color='r', alpha=0.3)
+    plt.scatter(symbols_rx.flatten().real, symbols_rx.flatten().imag, marker='o', color='r', alpha=0.3)
     plt.scatter(symbols.real, symbols.imag, marker='x', color='b', alpha=0.5)
     plt.xlabel("In-phase")
     plt.ylabel("Quadrature")
-    plt.title(f"Constellation Reçue ({M}-QAM, {chann_type} Channel)")
+    plt.title(f"Constellation Reçue ({M}-QAM, {chann_type} Channel, SNR={snr_db} dB)")
     plt.grid()
-    #plt.show()
+    plt.show()
 
     return ber
 
-"""
-# Test du système OFDM
-snr_range = np.arange(-4, 10, 1)
-ber_values_awgn = [evaluate_ofdm(snr, "AWGN", use_ldpc=True) for snr in snr_range]
-ber_values_rayleigh = [evaluate_ofdm(snr, "Rayleigh", use_ldpc=True) for snr in snr_range]
-ber_values_rician = [evaluate_ofdm(snr, "Rician", use_ldpc=True) for snr in snr_range]
+
+# OFDM system test
+snr_range = np.arange(2, 15, 5)
+ber_values_awgn = [evaluate_ofdm(snr, "AWGN", doppler_freq=1, use_ldpc=True) for snr in snr_range]
+ber_values_rayleigh = [evaluate_ofdm(snr, "Rayleigh", doppler_freq=1, use_ldpc=True) for snr in snr_range]
+ber_values_rician = [evaluate_ofdm(snr, "Rician", doppler_freq=1, use_ldpc=True) for snr in snr_range]
 
 # Affichage du BER vs SNR
 plt.figure(figsize=(8,5))
@@ -235,4 +216,3 @@ plt.legend()
 plt.grid()
 plt.title("Performance OFDM avec Codage LDPC")
 plt.show()
-"""
