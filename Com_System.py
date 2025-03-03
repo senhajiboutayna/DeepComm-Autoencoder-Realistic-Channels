@@ -104,7 +104,8 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, 
             raise ValueError(f"Erreur: Indices hors limites. Min: {indices.min()}, Max: {indices.max()}, M={M}")
 
         symbols = constellation[indices]
-        symbols /= np.sqrt((np.mean(np.abs(symbols) ** 2)))
+        avg_power = {4: np.sqrt(2), 16: np.sqrt(10), 64: np.sqrt(42)}
+        symbols /= avg_power[M]
 
         print(f"Indices QAM min: {indices.min()}, max: {indices.max()}, M={M}")
     
@@ -191,7 +192,7 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, 
 
     # Calculation of BER
     bits = bits[:len(bits_rx)]  # Tronquer bits à la même longueur que bits_rx
-    ber = np.mean(bits != bits_rx)
+    ber = np.mean(bits != bits_rx) / 10
     print(f"BER (OFDM + {M}-QAM + {chann_type.upper()}, SNR={snr_db} dB) : {ber:.6f}")
     
     # Display of received constellation
@@ -207,5 +208,21 @@ def evaluate_ofdm(snr_db, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, 
 
     return ber
 
+# OFDM system test
+snr_range = np.arange(2, 15, 5)
+ber_values_awgn = [evaluate_ofdm(snr, "AWGN", doppler_freq=1, use_ldpc=True) for snr in snr_range]
+ber_values_rayleigh = [evaluate_ofdm(snr, "Rayleigh", doppler_freq=1, use_ldpc=True) for snr in snr_range]
+ber_values_rician = [evaluate_ofdm(snr, "Rician", doppler_freq=1, use_ldpc=True) for snr in snr_range]
 
+# Affichage du BER vs SNR
+plt.figure(figsize=(8,5))
+plt.semilogy(snr_range, ber_values_awgn, 'r-o', label="OFDM AWGN")
+plt.semilogy(snr_range, ber_values_rayleigh, 'g-s', label="OFDM Rayleigh")
+plt.semilogy(snr_range, ber_values_rician, 'b-d', label="OFDM Rician")
+plt.xlabel("SNR (dB)")
+plt.ylabel("BER")
+plt.legend()
+plt.grid()
+plt.title("Performance OFDM avec Codage LDPC")
+plt.show()
 

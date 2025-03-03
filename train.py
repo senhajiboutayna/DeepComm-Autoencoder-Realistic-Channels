@@ -7,11 +7,11 @@ import numpy as np
 import math
 
 import matplotlib.pyplot as plt
+from IPython.utils import io
 
 from channel import channel
-from com_System import evaluate_ofdm
 from models import Encoder, Decoder
-from utils import MemoryMessages, count_errors
+from utils import MemoryMessages, count_errors, block_encoder, block_decoder, bler
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -254,30 +254,81 @@ if train:
     
     plot_training_loss(errors)  # Affichage de l'évolution de la perte 
 
+def bpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
+    """
+    Simulates a simple BPSK transmission system.
+
+    Parameters:
+        snr_db (float): SNR in dB.
+        num_bits (int): Number of bits to transmit.
+        channel_type (str): Channel type ("AWGN", "Rayleigh", "Rician").
+
+    Returns:
+        ber (float): Bit error rate.
+    """
+    # Generate random bits (0s and 1s)
+    bits = np.random.randint(0, 2, num_bits)
+
+    # BPSK modulation: 0 -> -1, 1 -> +1
+    symbols = 2 * bits - 1  
+
+    # Convert SNR from dB to linear scale
+    snr_linear = 10 ** (snr_db / 10)
+    noise_power = 1 / (2 * snr_linear)  # AWGN noise variance
+    noise = np.sqrt(noise_power) * np.random.randn(num_bits)  # Gaussian noise
+
+    # Apply channel effects
+    if channel_type == "AWGN":
+        received_signal = symbols + noise
+
+    elif channel_type == "Rayleigh":
+        h = (np.random.randn(num_bits) + 1j * np.random.randn(num_bits)) / np.sqrt(2)
+        received_signal = h * symbols + noise
+        received_signal /= np.abs(h)  # Equalization
+
+    elif channel_type == "Rician":
+        K = 3  # Rician K-factor
+        h_los = np.ones(num_bits)
+        h_nlos = (np.random.randn(num_bits) + 1j * np.random.randn(num_bits)) / np.sqrt(2)
+        h = np.sqrt(K / (K + 1)) * h_los + np.sqrt(1 / (K + 1)) * h_nlos
+        received_signal = h * symbols + noise
+        received_signal /= np.abs(h)  # Equalization
+
+    else:
+        raise ValueError(f"Unsupported channel type: {channel_type}")
+
+    # BPSK demodulation
+    detected_bits = (received_signal > 0).astype(int)
+
+    # Compute BER
+    errors = np.sum(bits != detected_bits)
+    ber = errors / num_bits
+    return ber
+
 # Évaluation de l'autoencodeur
-ber_autoencoder, snr_db = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=7, chann_type="AWGN", n_samples=10000, sigma_CSI=0.5)
+ber_autoencoder, snr_db = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=7, chann_type="AWGN", n_samples=10000, sigma_CSI=0.0)
 print(f"BER de l'autoencodeur (SNR= {snr_db} dB, Canal=AWGN): {ber_autoencoder:.6f}")
 
-snr_values = np.arange(2, 15, 5)  # Exemple de valeurs de SNR
+snr_values = np.arange(-4, 10, 1)  # Exemple de valeurs de SNR
 ber_autoencoder_list = []
-ber_ofdm_list = []
+ber_bpsk_list = []
 
 for snr in snr_values:
     # Évaluation de l'autoencodeur
-    ber_autoencoder, _ = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="AWGN", n_samples=10000, sigma_CSI=0.5)
+    ber_autoencoder, _ = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="AWGN", n_samples=10000, sigma_CSI=0.0)
     ber_autoencoder_list.append(ber_autoencoder)
     
-    # Évaluation du système OFDM
-    # Vous devez ajuster le code OFDM pour accepter un SNR variable
-    ber_ofdm = evaluate_ofdm(snr, chann_type="AWGN", num_symbols=10, M=16, K=64, CP=16, K_rician=3, doppler_freq=1, use_ldpc=True)  # Vous devez implémenter cette fonction
-    ber_ofdm_list.append(ber_ofdm)
+    # Évaluation du système BPSK
+    # Vous devez ajuster le code BPSK pour accepter un SNR variable
+    ber_bpsk = bpsk_communication(snr_db=snr,num_bits=10000, channel_type="AWGN")
+    ber_bpsk_list.append(ber_bpsk)
 
 plt.figure(figsize=(10, 6))
 plt.semilogy(snr_values, ber_autoencoder_list, 'b', label='Autoencodeur')
-plt.semilogy(snr_values, ber_ofdm_list, 'r', label='OFDM')
+plt.semilogy(snr_values, ber_bpsk_list, 'r', label='BPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
-plt.title('Comparaison des Performances entre Autoencodeur et OFDM')
+plt.title('Comparaison des Performances entre Autoencodeur et BPSK')
 plt.grid(True)
 plt.legend()
 plt.show()

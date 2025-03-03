@@ -7,6 +7,9 @@ from sklearn.manifold import TSNE
 from sklearn.impute import SimpleImputer
 import matplotlib.cm as cm
 
+# To do block encoding (Hamming)
+from sk_dsp_comm import fec_block as block
+
 class MemoryMessages():
     """
     Small class to get samples at every epoch during training
@@ -65,3 +68,122 @@ def count_errors(inputs, targets):
     total_errors = errors.sum().to("cpu").numpy()
     
     return total_errors
+
+def block_encoder(x, n, k):
+    """
+    This is going to be the definition of encoding using Hamming
+    Args:
+        x of shape (batch_size, k): Messages without encoding
+        n (int): Length of the encoded messages
+        k (int): Length of the actual messages
+    Returns:
+        y of shape (batch_size, n): Encoded messages with Hamming
+    """
+    # There is no need for encoding
+    # Si n=k, il n'y a pas besoin d'ajouter de bits de parité, car les messages d'entrée sont déjà à leur longueur maximale.
+    if n == k:
+        # Return as float because that the way encoder.hamm_encoder returns it
+        return x
+    
+    # We initialize the encoder with the number of parity bits that we need
+    # According to doc from block.fec_hamming
+    # Initialized with j. Where n = 2^j-1. k = n-j.
+    encoder = block.FECHamming(n-k)   # Initialisation de l'encodeur Hamming
+    """
+    block.FECHamming(n-k) : Initialise un encodeur Hamming avec n-k
+    n : Longueur totale du message encodé.
+    k : Longueur des bits d'information (message).
+    n-k : Nombre de bits de parité(de contole).
+    """
+    
+    # Allocation de l'espace pour les résultats
+    batch_size, _ = x.shape  ## batch_size : Nombre de messages dans le lot (exemple, 32 messages dans un batch).
+    # Pré-allocation :
+    ## Crée une matrice de zéros de taille (batch_size,n) pour stocker les messages encodés.
+    encoding_results = np.zeros((batch_size, n), dtype=int)
+    
+    # Encodage des Messages
+    for i, x_vec in enumerate(x):  # Boucle sur chaque message dans le batch 
+        # Ensure x_vec is a 1D array of integers
+        x_vec = np.array(x_vec).astype(int)
+        encoding_results[i, :] = encoder.hamm_encoder(x_vec)
+    
+    return encoding_results
+
+
+def block_decoder(y, n, k):
+    """
+    This is going to be the definition of decoding using Hamming
+    Args:
+        x of shape (batch_size, n): Encoded messages
+        n (int): Length of the encoded messages
+        k (int): Length of the actual messages
+    Returns:
+        y of shape (batch_size, k): Decoded messages with Hamming
+    """
+    # There is no need for decoding
+    if n == k:
+        # Return as float because that the way encoder.hamm_decoder returns it
+        return y
+    
+    # We initialize the decoder with the number of parity bits that we need
+    # According to doc from block.fec_hamming
+    # Initialized with j. Where n = 2^j-1. k = n-j.
+    decoder = block.FECHamming(n-k)
+
+    # Vérification des données binaires
+    assert np.all(np.isin(y, [0, 1]))
+    
+    # Get the batch size and pre-allocate adequate space for it
+    batch_size, _ = y.shape
+    decoding_results = np.zeros((batch_size, k), dtype=int)
+    
+    # Iterate over the batches and get the encoding for all of them
+    for i, y_vec in enumerate(y):
+        if torch.is_tensor(y_vec):
+            y_vec = y_vec.cpu().numpy()
+        y_vec = np.round(y_vec).astype(int)  # Arrondir et convertir en int
+        decoding_results[i, :] = decoder.hamm_decoder(y_vec)
+    
+    return decoding_results
+
+
+def bler(x, y):
+    """
+    Function to get the BLER
+    Args:
+        x (numpy array): Original samples
+        y (numpy array): Decoded samples
+    Returns:
+        y of shape (batch_size, k): Decoded messages with Hamming
+    """
+    # Get the total number of messages
+    batch_size, _ = x.shape  # Taille des Messages
+    """
+    Récupère le nombre de blocs dans x :
+        batch_size : Nombre de messages dans le batch.
+        k (ignoré avec _) : Longueur des messages.
+    
+    Exemple : Si x est de taille (10,4) (10 blocs, chacun de 4 bits), alors : 
+        batch_size = 10
+    """
+    
+    # Check where are the errors between received and transmitted
+    errors = (x != y)  ## Comparaison des Messages
+    """
+    Résultat : Un tableau booléen où chaque élément est True si le bit est incorrect.
+    """
+    # How many errors per block
+    errors_block = errors.sum(axis=1)  ## Nombre d'Erreurs par Bloc
+    """
+    axis=1 : La somme est effectuée sur chaque ligne.
+    Exemple : 
+    errors = [[False, False, True, False],
+          [False, False, False, False]]
+
+    errors_block = [1, 0]  # 1 erreur dans le 1er bloc, 0 dans le 2e.
+    """
+    # If there was an error in the block count it as bad block
+    total_errors = (errors_block > 0).sum()   ## Comptage des Blocs Erronés 
+
+    return total_errors/batch_size

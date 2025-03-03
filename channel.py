@@ -27,7 +27,7 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     sigma_noise = np.sqrt(n0 / 2)  # Écart-type du bruit
 
     if chann_type == "AWGN":
-        h = torch.ones_like(x)  # 🚀 Canal AWGN = pas d'effet de fading, donc h = 1
+        h = torch.ones_like(x)  # Canal AWGN = pas d'effet de fading, donc h = 1
         noise = sigma_noise * torch.randn_like(x)  # Bruit Gaussien
         x_channel = h * x + noise
         print(f"Mean of noise - AWGN: {torch.mean(noise)}, Std of noise - AWGN: {torch.std(noise)}")
