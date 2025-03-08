@@ -60,10 +60,12 @@ def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
     # Calcul du BER
     errors = np.sum(bits != detected_bits)
     ber = errors / num_bits
-    return ber
+    return ber 
+
+
 
 """
-# 🔹 Tracer BER vs SNR pour différents canaux
+# Tracer BER vs SNR pour différents canaux
 snr_values = np.arange(-4, 30, 2)
 ber_awgn = [qpsk_communication(snr, channel_type="AWGN") for snr in snr_values]
 ber_rayleigh = [qpsk_communication(snr, channel_type="Rayleigh") for snr in snr_values]
