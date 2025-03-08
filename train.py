@@ -12,6 +12,7 @@ from IPython.utils import io
 from channel import channel
 from models import Encoder, Decoder
 from utils import MemoryMessages, count_errors, block_encoder, block_decoder, bler
+from com_System import bpsk_communication, qpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -249,83 +250,38 @@ def plot_training_loss(losses):
     plt.show()
 
 if train:
-    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="AWGN", batch_size=64, n_epochs=10000, lr=0.001,
-                                clipping=0.5, plot=10, stop_value=0.005, sigma_CSI=0.0)    
+    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="Rayleigh", batch_size=64, n_epochs=20000, lr=0.001,
+                                clipping=0.5, plot=10, stop_value=0.000005, sigma_CSI=0.0)    
     
     plot_training_loss(errors)  # Affichage de l'évolution de la perte 
 
-def bpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
-    """
-    Simulates a simple BPSK transmission system.
-
-    Parameters:
-        snr_db (float): SNR in dB.
-        num_bits (int): Number of bits to transmit.
-        channel_type (str): Channel type ("AWGN", "Rayleigh", "Rician").
-
-    Returns:
-        ber (float): Bit error rate.
-    """
-    # Generate random bits (0s and 1s)
-    bits = np.random.randint(0, 2, num_bits)
-
-    # BPSK modulation: 0 -> -1, 1 -> +1
-    symbols = 2 * bits - 1  
-
-    # Convert SNR from dB to linear scale
-    snr_linear = 10 ** (snr_db / 10)
-    noise_power = 1 / (2 * snr_linear)  # AWGN noise variance
-    noise = np.sqrt(noise_power) * np.random.randn(num_bits)  # Gaussian noise
-
-    # Apply channel effects
-    if channel_type == "AWGN":
-        received_signal = symbols + noise
-
-    elif channel_type == "Rayleigh":
-        h = (np.random.randn(num_bits) + 1j * np.random.randn(num_bits)) / np.sqrt(2)
-        received_signal = h * symbols + noise
-        received_signal /= np.abs(h)  # Equalization
-
-    elif channel_type == "Rician":
-        K = 3  # Rician K-factor
-        h_los = np.ones(num_bits)
-        h_nlos = (np.random.randn(num_bits) + 1j * np.random.randn(num_bits)) / np.sqrt(2)
-        h = np.sqrt(K / (K + 1)) * h_los + np.sqrt(1 / (K + 1)) * h_nlos
-        received_signal = h * symbols + noise
-        received_signal /= np.abs(h)  # Equalization
-
-    else:
-        raise ValueError(f"Unsupported channel type: {channel_type}")
-
-    # BPSK demodulation
-    detected_bits = (received_signal > 0).astype(int)
-
-    # Compute BER
-    errors = np.sum(bits != detected_bits)
-    ber = errors / num_bits
-    return ber
 
 # Évaluation de l'autoencodeur
-ber_autoencoder, snr_db = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=7, chann_type="AWGN", n_samples=10000, sigma_CSI=0.0)
-print(f"BER de l'autoencodeur (SNR= {snr_db} dB, Canal=AWGN): {ber_autoencoder:.6f}")
+ber_autoencoder, snr_db = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=7, chann_type="Rayleigh", n_samples=20000, sigma_CSI=0.0)
+print(f"BER de l'autoencodeur (SNR= {snr_db} dB): {ber_autoencoder:.6f}")
 
-snr_values = np.arange(-4, 10, 1)  # Exemple de valeurs de SNR
+snr_values = np.arange(-4, 20, 1)  # Exemple de valeurs de SNR
 ber_autoencoder_list = []
 ber_bpsk_list = []
+ber_qpsk_list = []
 
 for snr in snr_values:
     # Évaluation de l'autoencodeur
-    ber_autoencoder, _ = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="AWGN", n_samples=10000, sigma_CSI=0.0)
+    ber_autoencoder, _ = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="Rayleigh", n_samples=20000, sigma_CSI=0.0)
     ber_autoencoder_list.append(ber_autoencoder)
     
     # Évaluation du système BPSK
     # Vous devez ajuster le code BPSK pour accepter un SNR variable
-    ber_bpsk = bpsk_communication(snr_db=snr,num_bits=10000, channel_type="AWGN")
+    ber_bpsk = bpsk_communication(snr_db=snr,num_bits=20000, channel_type="Rayleigh")
     ber_bpsk_list.append(ber_bpsk)
+
+    ber_qpsk = qpsk_communication(snr_db=snr,num_bits=20000, channel_type="Rayleigh")
+    ber_qpsk_list.append(ber_qpsk)
 
 plt.figure(figsize=(10, 6))
 plt.semilogy(snr_values, ber_autoencoder_list, 'b', label='Autoencodeur')
 plt.semilogy(snr_values, ber_bpsk_list, 'r', label='BPSK')
+plt.semilogy(snr_values, ber_qpsk_list, 'g', label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
 plt.title('Comparaison des Performances entre Autoencodeur et BPSK')
