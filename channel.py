@@ -217,9 +217,6 @@ plot_fading_distributions()
 evaluate_CSI_impact()
 """
 
-import torch
-import numpy as np
-
 def feedback_csi(true_csi, snr_feedback, compression_level, delay=0):
     """
     Simule un canal de feedback pour transmettre un CSI bruité et compressé.
