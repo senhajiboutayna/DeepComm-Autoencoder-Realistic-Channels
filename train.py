@@ -12,7 +12,7 @@ import time
 
 from channel import channel
 from models import Encoder, Decoder
-from utils import MemoryMessages, count_errors, plot_constellation
+from utils import MemoryMessages, count_errors
 from com_System import bpsk_communication, qpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -159,12 +159,12 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             avg_errors.append(avg_err)
 
             # Tracer les erreurs
-            if  epoch%plot==0 and epoch != 0 :
+            if  epoch%plot==0 and epoch != 0 and snr_db == 7:
                 plt.clf() ## Efface l'ancien graphique pour éviter qu'il ne se superpose au nouveau.
                 plt.plot(errors, label = 'Errors. Supervised training')
                 plt.plot(avg_errors,label="Average Errors. Supervised training")
                 plt.legend(loc = 'upper right')
-                plt.draw()
+                #plt.draw()
                 #plt.show()
 
             """
@@ -256,7 +256,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
     snr_linear = 10 ** (snr_db / 10)
     capacity = np.log2(1 + snr_linear)   # bits/s/Hz
 
-    return ber, snr_db, ser, capacity, latency, received_symbols_list
+    return ber, ser, capacity, latency, received_symbols_list
     
 
 def plot_training_loss(losses):
@@ -267,16 +267,10 @@ def plot_training_loss(losses):
     plt.plot(losses, label="Perte d'entraînement")
     plt.xlabel("Itérations")
     plt.ylabel("Perte (Cross Entropy)")
-    plt.title("Évolution de la perte pendant l'entraînement")
+    plt.title(f"Évolution de la perte pendant l'entraînement")
     plt.legend()
     plt.grid()
     plt.show()
-
-if train:
-    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=7 ,chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
-                                clipping=0.5, plot=10, stop_value=0.000005, sigma_CSI=0.0)    
-    
-    plot_training_loss(errors)  # Affichage de l'évolution de la perte 
 
 
 # Évaluation de l'autoencodeur
@@ -290,8 +284,13 @@ ber_qpsk_list = []
 
 for snr in snr_values:
     # Évaluation de l'autoencodeur
-    ber_autoencoder, snr_db, ser, capacity, latency, received_symbols = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="Rayleigh", n_samples=10000, sigma_CSI=0.0)
-    print(f"BER de l'autoencodeur (SNR= {snr_db} dB): {ber_autoencoder:.6f}")
+    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=snr ,chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
+                                clipping=0.5, plot=10, stop_value=0.000005, sigma_CSI=1.0)    
+    if snr == 7 :
+        plot_training_loss(errors)  # Affichage de l'évolution de la perte
+    
+    ber_autoencoder, ser, capacity, latency, received_symbols = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="Rayleigh", n_samples=10000, sigma_CSI=1.0)
+    print(f"BER de l'autoencodeur (SNR= {snr} dB): {ber_autoencoder:.6f}")
     ber_autoencoder_list.append(ber_autoencoder)
     ser_autoencoder_list.append(ser)
     capacity_autoencoder_list.append(capacity)

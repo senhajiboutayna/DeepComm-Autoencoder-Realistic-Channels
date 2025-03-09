@@ -204,14 +204,47 @@ def plot_channel_distribution_CSI(x, snr_db, chann_type="AWGN", K_rician=3, sigm
     plt.show()
 
 
-
+"""
 # Affichage des distributions simulées et théoriques
-#plot_channel_distribution(snr_db=10, chann_type="AWGN")
-#plot_channel_distribution(snr_db=10, chann_type="Rayleigh")
-#plot_channel_distribution(snr_db=10, chann_type="Rician", K_rician=3)
+plot_channel_distribution(snr_db=10, chann_type="AWGN")
+plot_channel_distribution(snr_db=10, chann_type="Rayleigh")
+plot_channel_distribution(snr_db=10, chann_type="Rician", K_rician=3)
 
 # Affichage des distributions de fading
-#plot_fading_distributions()
+plot_fading_distributions()
 
 #Test avec un CSI bruité
-#evaluate_CSI_impact()
+evaluate_CSI_impact()
+"""
+
+import torch
+import numpy as np
+
+def feedback_csi(true_csi, snr_feedback, compression_level, delay=0):
+    """
+    Simule un canal de feedback pour transmettre un CSI bruité et compressé.
+    
+    Args:
+        true_csi (torch.Tensor): Le CSI réel (sans bruit).
+        snr_feedback (float): SNR du canal de feedback en dB.
+        compression_level (int): Niveau de compression (ex: réduction de bits).
+        delay (int): Décalage temporel du CSI (ex: CSI vieux de τ instants).
+
+    Returns:
+        torch.Tensor: CSI bruité et compressé.
+    """
+    # Retard du CSI : On prend un CSI plus ancien (décalage temporel)
+    if delay > 0:
+        true_csi = torch.roll(true_csi, shifts=delay, dims=0)
+
+    # Ajout de bruit sur le feedback : Le bruit est proportionnel au SNR du feedback
+    noise_power = 10 ** (-snr_feedback / 10) # Convertir dB en puissance
+    noise = torch.randn_like(true_csi) * np.sqrt(noise_power) # Générer du bruit gaussien
+    noisy_csi = true_csi + noise # Ajouter le bruit au CSI
+
+    # Compression du CSI : Réduction du nombre de bits transmis
+    max_value = torch.max(torch.abs(noisy_csi)) # Trouver la valeur max pour normaliser
+    quantized_csi = torch.round(noisy_csi * (2 ** compression_level) / max_value) # Quantification
+    quantized_csi = quantized_csi * (max_value / (2 ** compression_level))  # Re-mise à l’échelle
+
+    return quantized_csi
