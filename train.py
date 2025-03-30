@@ -13,7 +13,7 @@ import time
 from channel import channel, feedback_csi
 from models import Encoder, Decoder
 from utils import MemoryMessages, count_errors
-from com_System import bpsk_communication, qpsk_communication
+from com_System import qpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -260,7 +260,7 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
 
     return encoder, decoder, errors
 
-def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples, sigma_CSI=0.5):
+def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples, sigma_CSI=0.5, feedback_params=None):
     """
     Évalue les performances de l'autoencodeur en termes de taux d'erreur binaire (BER).
 
@@ -299,8 +299,18 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
             # Encoder le message
             encoded_data = encoder(message_tensor)
 
+            # Gestion du feedback si activé
+            current_sigma_CSI = sigma_CSI
+            if feedback_params is not None:
+                true_csi = torch.randn(encoded_data.shape, device=device)
+                feedback_csi_value = feedback_csi(true_csi, 
+                                               feedback_params['snr_feedback'],
+                                               feedback_params['compression_level'],
+                                               feedback_params['delay'])
+                current_sigma_CSI = feedback_csi_value
+
             # Passer le message encodé à travers le canal
-            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=sigma_CSI)
+            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=current_sigma_CSI)
 
             # Décoder le message
             decoded_data = decoder(data_channel)
@@ -349,76 +359,10 @@ def plot_training_loss(losses):
     plt.show()
 
 
-"""
-# Évaluation de l'autoencodeur
-snr_values = np.arange(-4, 20, 1)  # Exemple de valeurs de SNR
-ber_autoencoder_list = []
-ser_autoencoder_list = []
-capacity_autoencoder_list = []
-latency_autoencoder_list = []
-ber_bpsk_list = []
-ber_qpsk_list = []
-
-for snr in snr_values:
-    # Évaluation de l'autoencodeur
-    encoder, decoder, errors = train_autoencoder(m=16, n=7,snr_db=snr ,chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
-                                clipping=0.5, plot=10, stop_value=0.000005, sigma_CSI=1.0)    
-    if snr == 7 :
-        plot_training_loss(errors)  # Affichage de l'évolution de la perte
-    
-    ber_autoencoder, ser, capacity, latency, received_symbols = evaluate_autoencoder(encoder, decoder, m=16, n=7, k=4, snr_db=snr, chann_type="Rayleigh", n_samples=10000, sigma_CSI=1.0)
-    print(f"BER de l'autoencodeur (SNR= {snr} dB): {ber_autoencoder:.6f}")
-    ber_autoencoder_list.append(ber_autoencoder)
-    ser_autoencoder_list.append(ser)
-    capacity_autoencoder_list.append(capacity)
-    latency_autoencoder_list.append(latency)
-    
-    # Évaluation du système BPSK
-    # Vous devez ajuster le code BPSK pour accepter un SNR variable
-    ber_bpsk = bpsk_communication(snr_db=snr,num_bits=10000, channel_type="Rayleigh")
-    ber_bpsk_list.append(ber_bpsk)
-
-    ber_qpsk = qpsk_communication(snr_db=snr,num_bits=10000, channel_type="Rayleigh")
-    ber_qpsk_list.append(ber_qpsk)
-
-# Tracer BER and SER vs SNR
-plt.figure(figsize=(10, 6))
-plt.semilogy(snr_values, ber_autoencoder_list, 'b', label='BER (Autoencodeur)')
-plt.semilogy(snr_values, ser_autoencoder_list, 'm', label='SER (Autoencodeur)')
-plt.semilogy(snr_values, ber_bpsk_list, 'r', label='BER (BPSK)')
-plt.semilogy(snr_values, ber_qpsk_list, 'g', label='BER (QPSK)')
-plt.xlabel('SNR (dB)')
-plt.ylabel('BER')
-plt.title('Comparaison des Performances entre Autoencodeur et QPSK')
-plt.grid(True)
-plt.legend()
-plt.show()
-
-# Tracer Capacité du canal vs SNR
-plt.figure(figsize=(10,6))
-plt.plot(snr_values, capacity_autoencoder_list, 'g-d', label='Capacité du canal')
-plt.xlabel('SNR (dB)')
-plt.ylabel('Capacité (bits/s/Hz)')
-plt.title('Capacité du canal en fonction du SNR')
-plt.grid(True)
-plt.legend()
-plt.show()
-
-# Tracer Latence de transmission vs SNR
-plt.figure(figsize=(10,6))
-plt.plot(snr_values, latency_autoencoder_list, 'm', label='Latence de transmission')
-plt.xlabel('SNR (dB)')
-plt.ylabel('Temps (s)')
-plt.title('Latence de transmission en fonction du SNR')
-plt.grid(True)
-plt.legend()
-plt.show()
-"""
-
 # Entraînement avec feedback bruité et compressé
-encoder_feedback, decoder_feedback, errors_feedback = train_autoencoder_with_feedback(m=16, n=7, snr_db=7, snr_feedback=10, compression_level=3, delay=2,
+encoder_feedback, decoder_feedback, errors_feedback = train_autoencoder_with_feedback(m=16, n=7, snr_db=7, snr_feedback=7, compression_level=3, delay=2,
                                                                 chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
-                                                                clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=0.0)
+                                                                clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0)
 
 # Entraînement classique (sans feedback)
 encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
@@ -432,4 +376,43 @@ plt.ylabel("BER")
 plt.title("Impact du Feedback Bruité sur l'Autoencodeur")
 plt.legend()
 plt.grid()
+plt.show()
+
+snr_values = np.arange(-4, 20, 2)  # SNR en dB
+n_samples = 10000  # Nombre d'échantillons pour l'évaluation
+m, n, k = 16, 7, 4  # Paramètres de l'autoencodeur
+
+# Stockage des résultats
+ber_autoencoder_no_feedback = []
+ber_autoencoder_with_feedback = []
+ber_qpsk = []
+
+# Boucle sur chaque SNR
+for snr in snr_values:
+    # Autoencodeur SANS feedback
+    ber_no_feedback, ser, capacity, latency, _ = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
+    ber_autoencoder_no_feedback.append(ber_no_feedback)
+
+    # Autoencodeur AVEC feedback (sigma_CSI > 0 pour simuler du bruit sur le CSI)
+    feedback_params = {
+        'snr_feedback': 15, 
+        'compression_level': 3, 
+        'delay': 2
+    }
+    ber_with_feedback, ser_feedback, capacity_feedback, latency_feedback, _ = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=1.0, feedback_params=feedback_params)
+    ber_autoencoder_with_feedback.append(ber_with_feedback)
+
+    # QPSK
+    ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type="Rayleigh"))
+
+# Tracé des résultats
+plt.figure(figsize=(10, 6))
+plt.semilogy(snr_values, ber_autoencoder_no_feedback, 'b', label='Autoencodeur (sans feedback)')
+plt.semilogy(snr_values, ber_autoencoder_with_feedback, 'c', label='Autoencodeur (avec feedback)')
+plt.semilogy(snr_values, ber_qpsk, 'g', label='QPSK')
+plt.xlabel('SNR (dB)')
+plt.ylabel('BER')
+plt.title('Comparaison des performances de transmission')
+plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+plt.legend()
 plt.show()
