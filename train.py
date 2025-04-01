@@ -184,7 +184,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     return encoder, decoder, errors
 
-def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_level, delay, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, sigma_CSI=0.5):
+def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_level, delay, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, sigma_CSI=0.5, binary=False):
     """
     Entraîne l'autoencodeur en utilisant un feedback CSI bruité et compressé.
 
@@ -234,7 +234,7 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
             encoded_data = encoder(data)
 
             true_csi = torch.randn(encoded_data.shape, device=device)
-            feedback_csi_value = feedback_csi(true_csi, snr_feedback, compression_level, delay)
+            feedback_csi_value = feedback_csi(true_csi, snr_feedback, compression_level, delay, binary=binary)
 
             _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=feedback_csi_value)
             data_channel = torch.clamp(data_channel, -1e5, 1e5)
@@ -362,7 +362,7 @@ def plot_training_loss(losses):
 # Entraînement avec feedback bruité et compressé
 encoder_feedback, decoder_feedback, errors_feedback = train_autoencoder_with_feedback(m=16, n=7, snr_db=7, snr_feedback=7, compression_level=3, delay=2,
                                                                 chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
-                                                                clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0)
+                                                                clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0, binary=False)
 
 # Entraînement classique (sans feedback)
 encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,

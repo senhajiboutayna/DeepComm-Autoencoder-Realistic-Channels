@@ -217,7 +217,7 @@ plot_fading_distributions()
 evaluate_CSI_impact()
 """
 
-def feedback_csi(true_csi, snr_feedback, compression_level, delay=0):
+def feedback_csi(true_csi, snr_feedback, compression_level, delay=0, binary=False):
     """
     Simule un canal de feedback pour transmettre un CSI bruité et compressé.
     
@@ -226,6 +226,7 @@ def feedback_csi(true_csi, snr_feedback, compression_level, delay=0):
         snr_feedback (float): SNR du canal de feedback en dB.
         compression_level (int): Niveau de compression (ex: réduction de bits).
         delay (int): Décalage temporel du CSI (ex: CSI vieux de τ instants).
+        binary (bool): Active le feedback binaire (1 bit par sous-porteuse).
 
     Returns:
         torch.Tensor: CSI bruité et compressé.
@@ -238,6 +239,9 @@ def feedback_csi(true_csi, snr_feedback, compression_level, delay=0):
     noise_power = 10 ** (-snr_feedback / 10) # Convertir dB en puissance
     noise = torch.randn_like(true_csi) * np.sqrt(noise_power) # Générer du bruit gaussien
     noisy_csi = true_csi + noise # Ajouter le bruit au CSI
+
+    if binary:
+        return torch.sign(noisy_csi)  # Feedback binaire (-1 ou 1)
 
     # Compression du CSI : Réduction du nombre de bits transmis
     max_value = torch.max(torch.abs(noisy_csi)) # Trouver la valeur max pour normaliser
