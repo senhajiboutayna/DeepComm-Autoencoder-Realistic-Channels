@@ -288,7 +288,7 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
 
     return encoder, decoder, feedback_model, errors, feedback_losses
 
-def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples, sigma_CSI=0.5, feedback_params=None):
+def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples, sigma_CSI=0.5, feedback_params=None, feedback_model=None):
     """
     Évalue les performances de l'autoencodeur en termes de taux d'erreur binaire (BER).
 
@@ -302,19 +302,29 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
         chann_type (str): Type de canal (par exemple, "AWGN").
         n_samples (int): Nombre d'échantillons à utiliser pour l'évaluation.
         sigma_CSI (float): Paramètre de variance pour le canal.
+        feedback_params (dict): Paramètres du feedback (snr_feedback, compression_level, delay).
+        feedback_model (nn.Module): Modèle pour améliorer le feedback CSI.
 
     Returns:
-        float: Le taux d'erreur binaire (BER) calculé.
+        dict: Résultats contenant BER, SER, capacité, latence et constellations.
     """
     encoder.eval()  # Mettre l'encodeur en mode évaluation
     decoder.eval()  # Mettre le décodeur en mode évaluation
+    if feedback_model is not None:
+        feedback_model.eval()
 
+    metrics = {
+        'ber' : 0,
+        'ser' : 0,
+        'capacity' : 0,
+        'latency' : 0,
+        'constellations' : []
+    }
+
+    start_time = time.time()  # Mesure du temps de transmission
     total_errors = 0
     total_symbol_errors = 0
     total_bits = 0
-    received_symbols_list = []
-
-    start_time = time.time()  # Mesure du temps de transmission
 
     with torch.no_grad():  # Désactiver le calcul du gradient pour l'évaluation
         for _ in range(n_samples):
@@ -330,11 +340,17 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
             # Gestion du feedback si activé
             current_sigma_CSI = sigma_CSI
             if feedback_params is not None:
+                # Génération du vrai CSI (simulé)
                 true_csi = torch.randn(encoded_data.shape, device=device)
+
+                # Application du feedback avec ou sans ML
                 feedback_csi_value = feedback_csi(true_csi, 
                                                feedback_params['snr_feedback'],
                                                feedback_params['compression_level'],
-                                               feedback_params['delay'])
+                                               feedback_params['delay'],
+                                               binary=False,
+                                               feedback_model=feedback_model,
+                                               use_ml=(feedback_model is not None))
                 current_sigma_CSI = feedback_csi_value
 
             # Passer le message encodé à travers le canal
@@ -348,6 +364,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
             # Compter les erreurs
             total_errors += np.sum(predicted_message != message)
+
             # Vérifier que la taille est un multiple de k
             num_symbols = predicted_message.shape[0]
             if num_symbols % k != 0:
@@ -356,21 +373,24 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
                 message = message[:num_symbols - (num_symbols % k)]
             total_symbol_errors += np.sum(np.any(predicted_message.reshape(-1, k) != message.reshape(-1, k), axis=1))
             total_bits += k  # Chaque message contient k bits
-            received_symbols_list.append(data_channel.cpu().numpy())
+            
+            # Stockage des constellations pour visualisation
+            if len(metrics['constellations']) < 1000: #Limiter le nmb stocké
+                metrics['constellations'].append(data_channel.cpu().numpy())
     
+    # Calcul de latence
     end_time = time.time()
-    latency = end_time - start_time  # Latence de transmission
-    print("Latency:", latency, "seconds")
+    metrics['latency'] = end_time - start_time  # Latence de transmission
 
-    # Calculer le BER
-    ber = total_errors / total_bits
-    ser = total_symbol_errors / n_samples
+    # Calculer le BER et SER
+    metrics['ber'] = total_errors / total_bits
+    metrics['ser'] = total_symbol_errors / n_samples
 
     # Capacité du canal (Shannon)
     snr_linear = 10 ** (snr_db / 10)
-    capacity = np.log2(1 + snr_linear)   # bits/s/Hz
+    metrics['capacity'] = np.log2(1 + snr_linear)   # bits/s/Hz
 
-    return ber, ser, capacity, latency, received_symbols_list
+    return metrics
     
 
 def plot_training_loss(losses):
@@ -425,50 +445,54 @@ if feedback_model is not None:
         plt.grid()
         plt.show()
 
-snr_values = np.arange(-4, 20, 2)  # SNR en dB
+snr_values = np.arange(-5, 21, 2)  # SNR en dB
 n_samples = 10000  # Nombre d'échantillons pour l'évaluation
 m, n, k = 16, 7, 4  # Paramètres de l'autoencodeur
 
 # Stockage des résultats
-ber_autoencoder_no_feedback = []
-ber_autoencoder_with_feedback = []
-ser_autoencoder_no_feedback = []
-ser_autoencoder_with_feedback = []
-capacity_autoencoder_no_feedback = []
-capacity_autoencoder_with_feedback = []
-latency_autoencoder_no_feedback = []
-latency_autoencoder_with_feedback = []
+results = {
+    'perfect': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []},
+    'noisy': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []},
+    'ml': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []}
+    }
 ber_qpsk = []
 
 # Boucle sur chaque SNR
 for snr in snr_values:
-    # Autoencodeur SANS feedback
-    ber_no_feedback, ser, capacity, latency, _ = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
-    ber_autoencoder_no_feedback.append(ber_no_feedback)
-    ser_autoencoder_no_feedback.append(ser)
-    capacity_autoencoder_no_feedback.append(capacity)
-    latency_autoencoder_no_feedback.append(latency)
+    print(f"\nEvaluating SNR = {snr} dB...")
 
-    # Autoencodeur AVEC feedback (sigma_CSI > 0 pour simuler du bruit sur le CSI)
+    # CSI parfait 
+    print(" - Perfect CSI")
+    metrics = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
+    for key in results['perfect']:
+        results['perfect'][key].append(metrics[key])
+
+    # Autoencodeur AVEC feedback bruité sans correction ML
+    print(" - Noisy feedback (no ML)")
     feedback_params = {
         'snr_feedback': 7, 
-        'compression_level': 5, 
-        'delay': 4
+        'compression_level': 4, 
+        'delay': 2
     }
-    ber_with_feedback, ser_feedback, capacity_feedback, latency_feedback, _ = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=1.0, feedback_params=feedback_params)
-    ber_autoencoder_with_feedback.append(ber_with_feedback)
-    ser_autoencoder_with_feedback.append(ser_feedback)
-    capacity_autoencoder_with_feedback.append(capacity_feedback)
-    latency_autoencoder_with_feedback.append(latency_feedback)
+    metrics = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params)
+    for key in results['noisy']:
+        results['noisy'][key].append(metrics[key])
 
+    # Autoencodeur AVEC feedback bruité avec correction ML
+    print(" - Noisy feedback (with ML)")
+    metrics = evaluate_autoencoder(encoder_ml, decoder_ml, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params, feedback_model=feedback_model)
+    for key in results['ml']:
+        results['ml'][key].append(metrics[key])
+    
     # QPSK
     ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type="Rayleigh"))
 
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
-plt.semilogy(snr_values, ber_autoencoder_no_feedback, 'b', label='Autoencodeur (sans feedback)')
-plt.semilogy(snr_values, ber_autoencoder_with_feedback, 'c', label='Autoencodeur (avec feedback)')
-plt.semilogy(snr_values, ber_qpsk, 'g', label='QPSK')
+plt.semilogy(snr_values, results['perfect']['ber'], 'b-o', label='CSI parfait')
+plt.semilogy(snr_values, results['noisy']['ber'], 'r--s', label='feedback bruité (sans ML)')
+plt.semilogy(snr_values, results['ml']['ber'], 'g-.d', label='feedback bruité (avec ML)')
+plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
 plt.title('Comparaison des performances de transmission : BER')
@@ -478,8 +502,9 @@ plt.show()
 
 # Tracé SER vs SNR
 plt.figure(figsize=(10, 6))
-plt.semilogy(snr_values, ser_autoencoder_no_feedback, 'b', label='Autoencodeur (sans feedback)')
-plt.semilogy(snr_values, ser_autoencoder_with_feedback, 'c', label='Autoencodeur (avec feedback)')
+plt.semilogy(snr_values, results['perfect']['ser'], 'b-o', label='CSI parfait')
+plt.semilogy(snr_values, results['noisy']['ser'], 'r--s', label='feedback bruité (sans ML)')
+plt.semilogy(snr_values, results['ml']['ser'], 'g-.d', label='feedback bruité (avec ML)')
 plt.xlabel('SNR (dB)')
 plt.ylabel('SER')
 plt.title('Comparaison des performances de transmission : SER')
@@ -489,22 +514,58 @@ plt.show()
 
 # Tracer Capacité du canal vs SNR
 plt.figure(figsize=(10,6))
-plt.plot(snr_values, capacity_autoencoder_no_feedback, 'b-o', label='Capacité du canal (sans feedback)')
-plt.plot(snr_values, capacity_autoencoder_with_feedback, 'c', label='Capacité du canal (avec feedback)')
+plt.plot(snr_values, results['perfect']['capacity'], 'b-o', label='CSI parfait')
+plt.plot(snr_values, results['noisy']['capacity'], 'r--s', label='feedback bruité (sans ML)')
+plt.plot(snr_values, results['ml']['capacity'], 'g-.d', label='feedback bruité (avec ML)')
 plt.xlabel('SNR (dB)')
 plt.ylabel('Capacité (bits/s/Hz)')
-plt.title('Capacité du canal en fonction du SNR')
+plt.title('Capacité théorique du canal en fonction du SNR')
 plt.grid(True)
 plt.legend()
 plt.show()
 
 # Tracer Latence de transmission vs SNR
 plt.figure(figsize=(10,6))
-plt.plot(snr_values, latency_autoencoder_no_feedback, 'b', label='Latence de transmission (sans feedback)')
-plt.plot(snr_values, latency_autoencoder_with_feedback, 'c', label='Latence de transmission (avec feedback)')
+plt.plot(snr_values, np.array(results['perfect']['latency'])*1000, 'b-o', label='CSI parfait')
+plt.plot(snr_values, np.array(results['noisy']['latency'])*1000, 'r--s', label='feedback bruité (sans ML)')
+plt.plot(snr_values, np.array(results['ml']['latency'])*1000, 'g-.d', label='feedback bruité (avec ML)')
 plt.xlabel('SNR (dB)')
 plt.ylabel('Latence (ms)')
 plt.title('Latence de transmission en fonction du SNR')
 plt.grid(True)
 plt.legend()
 plt.show()
+
+def plot_constellations(perfect_const, noisy_const, ml_const, n_points=500):
+    """Visualise les constellations pour les trois stratégies."""
+    plt.figure(figsize=(15, 5))
+    
+    # Sélection aléatoire de points pour la visualisation
+    idx = np.random.choice(len(perfect_const), min(n_points, len(perfect_const)), replace=False)
+    
+    # 1. CSI parfait
+    plt.subplot(1, 3, 1)
+    perfect_points = np.vstack(perfect_const)[idx]
+    plt.scatter(perfect_points[:, 0], perfect_points[:, 1], alpha=0.6)
+    plt.title('Constellation - CSI Parfait')
+    plt.grid(True)
+    
+    # 2. Feedback bruité sans ML
+    plt.subplot(1, 3, 2)
+    noisy_points = np.vstack(noisy_const)[idx]
+    plt.scatter(noisy_points[:, 0], noisy_points[:, 1], alpha=0.6, color='r')
+    plt.title('Constellation - Feedback Bruité (sans ML)')
+    plt.grid(True)
+    
+    # 3. Feedback bruité avec ML
+    plt.subplot(1, 3, 3)
+    ml_points = np.vstack(ml_const)[idx]
+    plt.scatter(ml_points[:, 0], ml_points[:, 1], alpha=0.6, color='g')
+    plt.title('Constellation - Feedback Bruité (avec ML)')
+    plt.grid(True)
+    
+    plt.tight_layout()
+    plt.show()
+
+# Visualiser les constellations
+plot_constellations(results['perfect']['constellations'], results['noisy']['constellations'], results['ml']['constellations'])
