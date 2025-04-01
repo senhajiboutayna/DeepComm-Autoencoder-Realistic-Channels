@@ -72,7 +72,7 @@ class Decoder(nn.Module):
                 torch.nn.init.normal_(m.weight)
                 torch.nn.init.zeros_(m.bias)
 
-    def forward(self, y, chann_type="AWGN"):
+    def forward(self, y):
 
         y = y.view(-1, self.n)  
 
@@ -81,3 +81,27 @@ class Decoder(nn.Module):
         y = self.linear_out(y)
         
         return y
+    
+
+class FeedbackCorrection(nn.Module):
+    def __init__(self, input_dim, hidden_dim=128):
+        super(FeedbackCorrection, self).__init__()
+
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim//2),
+            nn.ReLU(),
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(hidden_dim//2, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, input_dim),
+            nn.Tanh(),
+        )
+    
+    def forward(self, x):
+        encoder = self.encoder(x)
+        decoder = self.decoder(encoder)
+        return decoder

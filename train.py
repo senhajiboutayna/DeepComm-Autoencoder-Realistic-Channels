@@ -11,7 +11,7 @@ from IPython.utils import io
 import time
 
 from channel import channel, feedback_csi
-from models import Encoder, Decoder
+from models import Encoder, Decoder, FeedbackCorrection
 from utils import MemoryMessages, count_errors
 from com_System import qpsk_communication
 
@@ -184,7 +184,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     return encoder, decoder, errors
 
-def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_level, delay, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, sigma_CSI=0.5, binary=False):
+def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_level, delay, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, sigma_CSI=0.5, binary=False, use_ml_feedback=True):
     """
     Entraîne l'autoencodeur en utilisant un feedback CSI bruité et compressé.
 
@@ -213,52 +213,80 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
     encoder = Encoder(m=m, n=n).to(device)
     decoder = Decoder(m=m, n=n).to(device)
 
+    # Modèle pour améliorer le feedback CSI
+    feedback_model = None
+    if use_ml_feedback:
+        feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=128).to(device)
+        feedback_optimizer = optim.Adam(feedback_model.parameters(), lr=lr)
+
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr)
     decoder_optimizer = optim.Adam(decoder.parameters(), lr=lr)
 
     losses = []
     errors = []
+    feedback_losses = []
 
     for epoch in range(n_epochs):
         message = MemoryMessages(m)
         epoch_losses = []
         epoch_errors = 0
+        epoch_feedback_loss = 0
 
         while len(message) > 0:
             batch, targets_np = message.sample(batch_size)
             encoder_optimizer.zero_grad()
             decoder_optimizer.zero_grad()
+            if use_ml_feedback:
+                feedback_optimizer.zero_grad()
 
             data = torch.from_numpy(batch).unsqueeze(1).to(device)
 
             encoded_data = encoder(data)
 
-            true_csi = torch.randn(encoded_data.shape, device=device)
-            feedback_csi_value = feedback_csi(true_csi, snr_feedback, compression_level, delay, binary=binary)
+            with torch.no_grad():
+                _, _, _, _, h_true, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=sigma_CSI)
+            feedback_csi_value = feedback_csi(h_true, snr_feedback, compression_level, delay, binary, feedback_model, use_ml_feedback)
 
             _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=feedback_csi_value)
             data_channel = torch.clamp(data_channel, -1e5, 1e5)
 
             decoded_data = decoder(data_channel)
 
+            # Calcul de la perte principale
             targets = torch.from_numpy(targets_np).to(device).type(torch.long)
             loss = F.cross_entropy(decoded_data, targets)
-            loss.backward()
+            
+            # Calcul de la perte de feedback
+            if use_ml_feedback:
+                feedback_loss = F.mse_loss(feedback_csi_value, h_true)
+                total_loss = loss + 0.1 *feedback_loss
+                epoch_feedback_loss += feedback_loss.item()
+            else :
+                total_loss = loss
+
+            total_loss.backward()
 
             encoder_optimizer.step()
             decoder_optimizer.step()
+            if use_ml_feedback:
+                feedback_optimizer.step()
 
             epoch_losses.append(loss.item())
             epoch_errors += count_errors(decoded_data, targets)
 
         losses.append(np.mean(epoch_losses))
         errors.append(epoch_errors / m)
+        if use_ml_feedback:
+            feedback_losses.append(epoch_feedback_loss / m)
 
         # Affichage de l'avancement
         if epoch % plot == 0:
-            print(f"Epoch {epoch}: Loss = {losses[-1]:.6f}, Errors = {errors[-1]:.6f}")
+            log_str = f"Epoch {epoch}: Loss={losses[-1]:.4f}, BER={errors[-1]:.4f}"
+            if use_ml_feedback:
+                log_str += f", Feedback Loss={feedback_losses[-1]:.4f}"
+            print(log_str)
 
-    return encoder, decoder, errors
+    return encoder, decoder, feedback_model, errors, feedback_losses
 
 def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples, sigma_CSI=0.5, feedback_params=None):
     """
@@ -358,19 +386,28 @@ def plot_training_loss(losses):
     plt.grid()
     plt.show()
 
-
-# Entraînement avec feedback bruité et compressé
-encoder_feedback, decoder_feedback, errors_feedback = train_autoencoder_with_feedback(m=16, n=7, snr_db=7, snr_feedback=7, compression_level=5, delay=4,
-                                                                chann_type="Rayleigh", batch_size=64, n_epochs=5000, lr=0.001,
-                                                                clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0, binary=False)
-
 # Entraînement classique (sans feedback)
-encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=5000, lr=0.001,
+print("Training with perfect CSI...")
+encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
                                                     clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=0.0)
+
+# Entraînement avec Feedback bruité sans correction ML
+print("Training with noisy feedback (no ML)...")
+encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder_with_feedback(m=16, n=7, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
+                                                                chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
+                                                                clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0, binary=False, use_ml_feedback=False)
+
+print("Training with noisy feedback (with ML)...")
+encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder_with_feedback(16, 7, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
+                                                                chann_type="Rayleigh", batch_size=64, n_epochs=10000,lr=0.001, clipping=0.5, plot=100, stop_value=0.0001,
+                                                                sigma_CSI=0.5, binary=False, use_ml_feedback=True)
+
+
 # Tracer les courbes d'entraînement
 plt.figure(figsize=(8,5))
 plt.plot(errors_perfect, label="Sans Feedback (CSI parfait)")
-plt.plot(errors_feedback, label="Avec Feedback Bruité")
+plt.plot(errors_feedback, label="Avec Feedback Bruité (sans ML)")
+plt.plot(errors_ml, label="Avec Feedback Bruité (ML)")
 plt.xlabel("Epochs")
 plt.ylabel("BER")
 plt.title("Impact du Feedback Bruité sur l'Autoencodeur")
@@ -378,8 +415,18 @@ plt.legend()
 plt.grid()
 plt.show()
 
+if feedback_model is not None:
+        plt.figure(figsize=(10, 6))
+        plt.plot(feedback_losses, label="Perte du modèle de feedback")
+        plt.xlabel("Epochs")
+        plt.ylabel("MSE Loss")
+        plt.title("Évolution de la perte du modèle de feedback")
+        plt.legend()
+        plt.grid()
+        plt.show()
+
 snr_values = np.arange(-4, 20, 2)  # SNR en dB
-n_samples = 5000  # Nombre d'échantillons pour l'évaluation
+n_samples = 10000  # Nombre d'échantillons pour l'évaluation
 m, n, k = 16, 7, 4  # Paramètres de l'autoencodeur
 
 # Stockage des résultats
@@ -442,7 +489,7 @@ plt.show()
 
 # Tracer Capacité du canal vs SNR
 plt.figure(figsize=(10,6))
-plt.plot(snr_values, capacity_autoencoder_no_feedback, 'b', label='Capacité du canal (sans feedback)')
+plt.plot(snr_values, capacity_autoencoder_no_feedback, 'b-o', label='Capacité du canal (sans feedback)')
 plt.plot(snr_values, capacity_autoencoder_with_feedback, 'c', label='Capacité du canal (avec feedback)')
 plt.xlabel('SNR (dB)')
 plt.ylabel('Capacité (bits/s/Hz)')

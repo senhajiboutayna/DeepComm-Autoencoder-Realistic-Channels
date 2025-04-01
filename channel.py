@@ -217,7 +217,7 @@ plot_fading_distributions()
 evaluate_CSI_impact()
 """
 
-def feedback_csi(true_csi, snr_feedback, compression_level, delay=0, binary=False):
+def feedback_csi(true_csi, snr_feedback, compression_level, delay=0, binary=False, feedback_model=None, use_ml=True):
     """
     Simule un canal de feedback pour transmettre un CSI bruité et compressé.
     
@@ -247,5 +247,9 @@ def feedback_csi(true_csi, snr_feedback, compression_level, delay=0, binary=Fals
     max_value = torch.max(torch.abs(noisy_csi)) # Trouver la valeur max pour normaliser
     quantized_csi = torch.round(noisy_csi * (2 ** compression_level) / max_value) # Quantification
     quantized_csi = quantized_csi * (max_value / (2 ** compression_level))  # Re-mise à l’échelle
+
+    # Utilisation d'un modèle ML pour améliorer le feedback
+    if use_ml and feedback_model is not None:
+        quantized_csi = feedback_model(quantized_csi.unsqueeze(0)).squeeze(0)
 
     return quantized_csi
