@@ -360,12 +360,12 @@ def plot_training_loss(losses):
 
 
 # Entraînement avec feedback bruité et compressé
-encoder_feedback, decoder_feedback, errors_feedback = train_autoencoder_with_feedback(m=16, n=7, snr_db=7, snr_feedback=7, compression_level=3, delay=2,
-                                                                chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
+encoder_feedback, decoder_feedback, errors_feedback = train_autoencoder_with_feedback(m=16, n=7, snr_db=7, snr_feedback=7, compression_level=5, delay=4,
+                                                                chann_type="Rayleigh", batch_size=64, n_epochs=5000, lr=0.001,
                                                                 clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0, binary=False)
 
 # Entraînement classique (sans feedback)
-encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
+encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=5000, lr=0.001,
                                                     clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=0.0)
 # Tracer les courbes d'entraînement
 plt.figure(figsize=(8,5))
@@ -379,12 +379,18 @@ plt.grid()
 plt.show()
 
 snr_values = np.arange(-4, 20, 2)  # SNR en dB
-n_samples = 10000  # Nombre d'échantillons pour l'évaluation
+n_samples = 5000  # Nombre d'échantillons pour l'évaluation
 m, n, k = 16, 7, 4  # Paramètres de l'autoencodeur
 
 # Stockage des résultats
 ber_autoencoder_no_feedback = []
 ber_autoencoder_with_feedback = []
+ser_autoencoder_no_feedback = []
+ser_autoencoder_with_feedback = []
+capacity_autoencoder_no_feedback = []
+capacity_autoencoder_with_feedback = []
+latency_autoencoder_no_feedback = []
+latency_autoencoder_with_feedback = []
 ber_qpsk = []
 
 # Boucle sur chaque SNR
@@ -392,27 +398,66 @@ for snr in snr_values:
     # Autoencodeur SANS feedback
     ber_no_feedback, ser, capacity, latency, _ = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
     ber_autoencoder_no_feedback.append(ber_no_feedback)
+    ser_autoencoder_no_feedback.append(ser)
+    capacity_autoencoder_no_feedback.append(capacity)
+    latency_autoencoder_no_feedback.append(latency)
 
     # Autoencodeur AVEC feedback (sigma_CSI > 0 pour simuler du bruit sur le CSI)
     feedback_params = {
-        'snr_feedback': 15, 
-        'compression_level': 3, 
-        'delay': 2
+        'snr_feedback': 7, 
+        'compression_level': 5, 
+        'delay': 4
     }
     ber_with_feedback, ser_feedback, capacity_feedback, latency_feedback, _ = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=1.0, feedback_params=feedback_params)
     ber_autoencoder_with_feedback.append(ber_with_feedback)
+    ser_autoencoder_with_feedback.append(ser_feedback)
+    capacity_autoencoder_with_feedback.append(capacity_feedback)
+    latency_autoencoder_with_feedback.append(latency_feedback)
 
     # QPSK
     ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type="Rayleigh"))
 
-# Tracé des résultats
+# Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
 plt.semilogy(snr_values, ber_autoencoder_no_feedback, 'b', label='Autoencodeur (sans feedback)')
 plt.semilogy(snr_values, ber_autoencoder_with_feedback, 'c', label='Autoencodeur (avec feedback)')
 plt.semilogy(snr_values, ber_qpsk, 'g', label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
-plt.title('Comparaison des performances de transmission')
+plt.title('Comparaison des performances de transmission : BER')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+plt.legend()
+plt.show()
+
+# Tracé SER vs SNR
+plt.figure(figsize=(10, 6))
+plt.semilogy(snr_values, ser_autoencoder_no_feedback, 'b', label='Autoencodeur (sans feedback)')
+plt.semilogy(snr_values, ser_autoencoder_with_feedback, 'c', label='Autoencodeur (avec feedback)')
+plt.xlabel('SNR (dB)')
+plt.ylabel('SER')
+plt.title('Comparaison des performances de transmission : SER')
+plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+plt.legend()
+plt.show()
+
+# Tracer Capacité du canal vs SNR
+plt.figure(figsize=(10,6))
+plt.plot(snr_values, capacity_autoencoder_no_feedback, 'b', label='Capacité du canal (sans feedback)')
+plt.plot(snr_values, capacity_autoencoder_with_feedback, 'c', label='Capacité du canal (avec feedback)')
+plt.xlabel('SNR (dB)')
+plt.ylabel('Capacité (bits/s/Hz)')
+plt.title('Capacité du canal en fonction du SNR')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+# Tracer Latence de transmission vs SNR
+plt.figure(figsize=(10,6))
+plt.plot(snr_values, latency_autoencoder_no_feedback, 'b', label='Latence de transmission (sans feedback)')
+plt.plot(snr_values, latency_autoencoder_with_feedback, 'c', label='Latence de transmission (avec feedback)')
+plt.xlabel('SNR (dB)')
+plt.ylabel('Latence (ms)')
+plt.title('Latence de transmission en fonction du SNR')
+plt.grid(True)
 plt.legend()
 plt.show()
