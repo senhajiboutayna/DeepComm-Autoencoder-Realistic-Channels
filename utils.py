@@ -285,32 +285,3 @@ def plot_constellations(perfect_const, noisy_const, ml_const, modulation='qpsk',
     
     plt.tight_layout()
     plt.show()
-    
-    # Calcul et affichage des métriques de qualité
-    print("\nAnalyse de qualité des constellations:")
-    print("----------------------------------")
-    
-    def calculate_metrics(points, ideal_points, label):
-        # Calcul de l'erreur quadratique moyenne
-        distances = []
-        for p in points:
-            dist = np.min(np.sum((ideal_points - p)**2, axis=1))
-            distances.append(dist)
-        mse = np.mean(distances)
-        
-        # Calcul de l'écart type des clusters
-        cluster_std = []
-        for ideal in ideal_points:
-            cluster_points = points[np.argmin(np.sum((points - ideal)**2, axis=1), axis=0) < 0.5]
-            if len(cluster_points) > 0:
-                cluster_std.append(np.std(cluster_points, axis=0).mean())
-        
-        avg_std = np.mean(cluster_std) if cluster_std else 0
-        print(f"{label}:")
-        print(f"  - MSE par rapport à l'idéal: {mse:.4f}")
-        print(f"  - Dispersion moyenne des clusters: {avg_std:.4f}")
-        print()
-    
-    calculate_metrics(perfect_points, ideal_points, "CSI Parfait")
-    calculate_metrics(noisy_points, ideal_points, "Feedback Bruité sans ML")
-    calculate_metrics(ml_points, ideal_points, "Feedback Bruité avec ML")
