@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 import math
 
 # To make plots about constellations
@@ -187,3 +188,129 @@ def bler(x, y):
     total_errors = (errors_block > 0).sum()   ## Comptage des Blocs Erronés 
 
     return total_errors/batch_size
+
+def plot_training_loss(losses):
+    """
+    Trace l'évolution de la perte pendant l'entraînement.
+    """
+    plt.figure(figsize=(8,5))
+    plt.plot(losses, label="Perte d'entraînement")
+    plt.xlabel("Itérations")
+    plt.ylabel("Perte (Cross Entropy)")
+    plt.title(f"Évolution de la perte pendant l'entraînement")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+def plot_constellations(perfect_const, noisy_const, ml_const, modulation='qpsk', n_points=500):
+    """
+    Visualise et compare les constellations avec la constellation idéale.
+    
+    Args:
+        perfect_const: Constellation avec CSI parfait
+        noisy_const: Constellation avec feedback bruité sans ML
+        ml_const: Constellation avec feedback bruité avec ML
+        modulation: Type de modulation ('qpsk', '16qam', etc.)
+        n_points: Nombre de points à afficher
+    """
+    # Définition des constellations idéales selon le type de modulation
+    ideal_constellations = {
+        'qpsk': np.array([
+            [1/np.sqrt(2), 1/np.sqrt(2)],
+            [-1/np.sqrt(2), 1/np.sqrt(2)],
+            [-1/np.sqrt(2), -1/np.sqrt(2)],
+            [1/np.sqrt(2), -1/np.sqrt(2)]
+        ]),
+        '16qam': np.array([
+            [-3, -3], [-3, -1], [-3, 1], [-3, 3],
+            [-1, -3], [-1, -1], [-1, 1], [-1, 3],
+            [1, -3], [1, -1], [1, 1], [1, 3],
+            [3, -3], [3, -1], [3, 1], [3, 3]
+        ]) / np.sqrt(10)
+    }
+    
+    ideal_points = ideal_constellations.get(modulation.lower(), None)
+    if ideal_points is None:
+        raise ValueError(f"Modulation {modulation} non supportée. Options: 'qpsk', '16qam'")
+    
+    # Sélection aléatoire de points pour la visualisation
+    idx = np.random.choice(len(perfect_const), min(n_points, len(perfect_const)), replace=False)
+    
+    # Préparation des données
+    perfect_points = np.vstack(perfect_const)[idx]
+    noisy_points = np.vstack(noisy_const)[idx]
+    ml_points = np.vstack(ml_const)[idx]
+    
+    # Création de la figure
+    plt.figure(figsize=(18, 5))
+    
+    # 1. Constellation idéale
+    plt.subplot(1, 4, 1)
+    plt.scatter(ideal_points[:, 0], ideal_points[:, 1], color='k', marker='x', s=100, label='Points idéaux')
+    plt.title(f'Constellation Idéale ({modulation.upper()})')
+    plt.grid(True)
+    plt.axis('equal')
+    plt.xlim(-1.5, 1.5)
+    plt.ylim(-1.5, 1.5)
+    
+    # 2. CSI parfait
+    plt.subplot(1, 4, 2)
+    plt.scatter(ideal_points[:, 0], ideal_points[:, 1], color='k', marker='x', s=100, alpha=0.3)
+    plt.scatter(perfect_points[:, 0], perfect_points[:, 1], alpha=0.6, color='b')
+    plt.title('Constellation - CSI Parfait')
+    plt.grid(True)
+    plt.axis('equal')
+    plt.xlim(-1.5, 1.5)
+    plt.ylim(-1.5, 1.5)
+    
+    # 3. Feedback bruité sans ML
+    plt.subplot(1, 4, 3)
+    plt.scatter(ideal_points[:, 0], ideal_points[:, 1], color='k', marker='x', s=100, alpha=0.3)
+    plt.scatter(noisy_points[:, 0], noisy_points[:, 1], alpha=0.6, color='r')
+    plt.title('Feedback Bruité (sans ML)')
+    plt.grid(True)
+    plt.axis('equal')
+    plt.xlim(-1.5, 1.5)
+    plt.ylim(-1.5, 1.5)
+    
+    # 4. Feedback bruité avec ML
+    plt.subplot(1, 4, 4)
+    plt.scatter(ideal_points[:, 0], ideal_points[:, 1], color='k', marker='x', s=100, alpha=0.3)
+    plt.scatter(ml_points[:, 0], ml_points[:, 1], alpha=0.6, color='g')
+    plt.title('Feedback Bruité (avec ML)')
+    plt.grid(True)
+    plt.axis('equal')
+    plt.xlim(-1.5, 1.5)
+    plt.ylim(-1.5, 1.5)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Calcul et affichage des métriques de qualité
+    print("\nAnalyse de qualité des constellations:")
+    print("----------------------------------")
+    
+    def calculate_metrics(points, ideal_points, label):
+        # Calcul de l'erreur quadratique moyenne
+        distances = []
+        for p in points:
+            dist = np.min(np.sum((ideal_points - p)**2, axis=1))
+            distances.append(dist)
+        mse = np.mean(distances)
+        
+        # Calcul de l'écart type des clusters
+        cluster_std = []
+        for ideal in ideal_points:
+            cluster_points = points[np.argmin(np.sum((points - ideal)**2, axis=1), axis=0) < 0.5]
+            if len(cluster_points) > 0:
+                cluster_std.append(np.std(cluster_points, axis=0).mean())
+        
+        avg_std = np.mean(cluster_std) if cluster_std else 0
+        print(f"{label}:")
+        print(f"  - MSE par rapport à l'idéal: {mse:.4f}")
+        print(f"  - Dispersion moyenne des clusters: {avg_std:.4f}")
+        print()
+    
+    calculate_metrics(perfect_points, ideal_points, "CSI Parfait")
+    calculate_metrics(noisy_points, ideal_points, "Feedback Bruité sans ML")
+    calculate_metrics(ml_points, ideal_points, "Feedback Bruité avec ML")

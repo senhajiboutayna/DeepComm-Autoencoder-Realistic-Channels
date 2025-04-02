@@ -12,7 +12,7 @@ import time
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
-from utils import MemoryMessages, count_errors
+from utils import MemoryMessages, count_errors, plot_constellations
 from com_System import qpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -391,20 +391,6 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
     metrics['capacity'] = np.log2(1 + snr_linear)   # bits/s/Hz
 
     return metrics
-    
-
-def plot_training_loss(losses):
-    """
-    Trace l'évolution de la perte pendant l'entraînement.
-    """
-    plt.figure(figsize=(8,5))
-    plt.plot(losses, label="Perte d'entraînement")
-    plt.xlabel("Itérations")
-    plt.ylabel("Perte (Cross Entropy)")
-    plt.title(f"Évolution de la perte pendant l'entraînement")
-    plt.legend()
-    plt.grid()
-    plt.show()
 
 # Entraînement classique (sans feedback)
 print("Training with perfect CSI...")
@@ -536,36 +522,8 @@ plt.grid(True)
 plt.legend()
 plt.show()
 
-def plot_constellations(perfect_const, noisy_const, ml_const, n_points=500):
-    """Visualise les constellations pour les trois stratégies."""
-    plt.figure(figsize=(15, 5))
-    
-    # Sélection aléatoire de points pour la visualisation
-    idx = np.random.choice(len(perfect_const), min(n_points, len(perfect_const)), replace=False)
-    
-    # 1. CSI parfait
-    plt.subplot(1, 3, 1)
-    perfect_points = np.vstack(perfect_const)[idx]
-    plt.scatter(perfect_points[:, 0], perfect_points[:, 1], alpha=0.6)
-    plt.title('Constellation - CSI Parfait')
-    plt.grid(True)
-    
-    # 2. Feedback bruité sans ML
-    plt.subplot(1, 3, 2)
-    noisy_points = np.vstack(noisy_const)[idx]
-    plt.scatter(noisy_points[:, 0], noisy_points[:, 1], alpha=0.6, color='r')
-    plt.title('Constellation - Feedback Bruité (sans ML)')
-    plt.grid(True)
-    
-    # 3. Feedback bruité avec ML
-    plt.subplot(1, 3, 3)
-    ml_points = np.vstack(ml_const)[idx]
-    plt.scatter(ml_points[:, 0], ml_points[:, 1], alpha=0.6, color='g')
-    plt.title('Constellation - Feedback Bruité (avec ML)')
-    plt.grid(True)
-    
-    plt.tight_layout()
-    plt.show()
-
 # Visualiser les constellations
-plot_constellations(results['perfect']['constellations'], results['noisy']['constellations'], results['ml']['constellations'])
+plot_constellations(results['perfect']['constellations'], 
+                    results['noisy']['constellations'], 
+                    results['ml']['constellations'],
+                    modulation='qpsk')
