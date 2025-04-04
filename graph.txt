@@ -1,0 +1,66 @@
+### autoencoder
+
+classDiagram
+    class Encoder {
+        +linear_M: Sequential(Embedding, ReLU)
+        +linear_N: Linear
+        +normalization: BatchNorm1d
+        +init_weights()
+        +forward(x) y
+    }
+
+    class Decoder {
+        +linear_relu: Sequential(Linear, ReLU)
+        +linear_out: Sequential(Linear, LogSoftmax)
+        +init_weights()
+        +forward(y) decoded
+    }
+
+    class FeedbackCorrection {
+        +encoder: Sequential(Linear, ReLU, Linear, ReLU)
+        +decoder: Sequential(Linear, ReLU, Linear, Tanh)
+        +forward(x) corrected_csi
+    }
+
+    Encoder --> Decoder : Signal transmis
+    FeedbackCorrection --> Encoder : CSI corrigé
+
+
+### entrainement
+
+
+sequenceDiagram
+    participant Entraînement
+    participant Encodeur
+    participant Canal
+    participant Feedback
+    participant Décodeur
+
+    Entraînement->>Encodeur: Message d'entrée (batch)
+    Encodeur->>Canal: Signal encodé
+    Canal->>Feedback: Estimation CSI
+    Feedback->>Feedback: Compression/Bruit/Délai
+    Feedback->>Encodeur: CSI corrigé (optionnel)
+    Canal->>Décodeur: Signal bruité
+    Décodeur->>Entraînement: Message décodé
+    Entraînement->>Entraînement: Calcul loss (CrossEntropy)
+    Entraînement->>Encodeur: Backpropagation
+    Entraînement->>Décodeur: Backpropagation
+    Entraînement->>Feedback: Backpropagation (optionnel)
+
+
+### système 
+
+
+graph LR
+    A[Message] --> B[Encoder]
+    B --> C[Channel]
+    C --> D[Decoder]
+    C --> E[CSI Estimation]
+    E --> F[Feedback Path]
+    F -->|Compressed CSI| G[Feedback Correction]
+    G -->|Corrected CSI| B
+    D --> H[Loss Calculation]
+    H -->|Backprop| B
+    H -->|Backprop| D
+    H -->|Backprop| G

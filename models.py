@@ -1,8 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.distributions.normal import Normal
-from torch.distributions.multivariate_normal import MultivariateNormal
-import math
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print(f"Pytorch device: {device}")
