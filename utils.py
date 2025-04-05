@@ -1,12 +1,6 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-import math
-
-# To make plots about constellations
-from sklearn.manifold import TSNE
-from sklearn.impute import SimpleImputer
-import matplotlib.cm as cm
 
 # To do block encoding (Hamming)
 from sk_dsp_comm import fec_block as block
