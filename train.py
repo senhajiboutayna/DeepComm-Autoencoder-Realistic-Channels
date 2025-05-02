@@ -394,18 +394,18 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
 # Entraînement classique (sans feedback)
 print("Training with perfect CSI...")
-encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=20000, lr=0.001,
+encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
                                                     clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=0.0)
 
 # Entraînement avec Feedback bruité sans correction ML
 print("Training with noisy feedback (no ML)...")
 encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder_with_feedback(m=16, n=7, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
-                                                                chann_type="Rayleigh", batch_size=64, n_epochs=20000, lr=0.001,
+                                                                chann_type="Rayleigh", batch_size=64, n_epochs=10000, lr=0.001,
                                                                 clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0, binary=False, use_ml_feedback=False)
 
 print("Training with noisy feedback (with ML)...")
 encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder_with_feedback(16, 7, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
-                                                                chann_type="Rayleigh", batch_size=64, n_epochs=20000,lr=0.001, clipping=0.5, plot=100, stop_value=0.0001,
+                                                                chann_type="Rayleigh", batch_size=64, n_epochs=10000,lr=0.001, clipping=0.5, plot=100, stop_value=0.0001,
                                                                 sigma_CSI=0.5, binary=False, use_ml_feedback=True)
 
 
@@ -432,7 +432,7 @@ if feedback_model is not None:
         plt.show()
 
 snr_values = np.arange(-5, 30, 2)  # SNR en dB
-n_samples = 20000  # Nombre d'échantillons pour l'évaluation
+n_samples = 10000  # Nombre d'échantillons pour l'évaluation
 m, n, k = 16, 7, 4  # Paramètres de l'autoencodeur
 
 # Stockage des résultats
