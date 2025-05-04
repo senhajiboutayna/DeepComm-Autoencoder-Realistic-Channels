@@ -132,7 +132,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 # Charger les modèles sauvegardés
 print("Chargement des modèles...")
 m, n, k = 16, 7, 4
-chann_type = 'AWGN'
+chann_type = 'Rician'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type)
