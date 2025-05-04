@@ -11,17 +11,17 @@ from com_System import qpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-def load_models(m, n, prefix=''):
+def load_models(m, n, prefix='', chann_type='AWGN'):
     encoder = Encoder(m=m, n=n).to(device)
     decoder = Decoder(m=m, n=n).to(device)
     
-    encoder.load_state_dict(torch.load(f'saved_models/{prefix}encoder.pth'))
-    decoder.load_state_dict(torch.load(f'saved_models/{prefix}decoder.pth'))
+    encoder.load_state_dict(torch.load(f'saved_models/{prefix}encoder_{chann_type}.pth'))
+    decoder.load_state_dict(torch.load(f'saved_models/{prefix}decoder_{chann_type}.pth'))
     
     feedback_model = None
     if os.path.exists(f'saved_models/{prefix}feedback_model.pth'):
         feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=128).to(device)
-        feedback_model.load_state_dict(torch.load(f'saved_models/{prefix}feedback_model.pth'))
+        feedback_model.load_state_dict(torch.load(f'saved_models/{prefix}feedback_{chann_type}.pth'))
     
     return encoder, decoder, feedback_model
 
@@ -132,10 +132,11 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 # Charger les modèles sauvegardés
 print("Chargement des modèles...")
 m, n, k = 16, 7, 4
+chann_type = 'AWGN'
 
-encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_')
-encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_')
-encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_')
+encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type)
+encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type)
+encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_type=chann_type)
 
 # Paramètres d'évaluation
 snr_values = np.arange(-5, 30, 2)
@@ -155,7 +156,7 @@ for snr in snr_values:
 
     # CSI parfait 
     print(" - Perfect CSI")
-    metrics = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
+    metrics = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
     for key in results['perfect']:
         results['perfect'][key].append(metrics[key])
 
@@ -166,18 +167,18 @@ for snr in snr_values:
         'compression_level': 4, 
         'delay': 2
     }
-    metrics = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params)
+    metrics = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params)
     for key in results['noisy']:
         results['noisy'][key].append(metrics[key])
 
     # Autoencodeur AVEC feedback bruité avec correction ML
     print(" - Noisy feedback (with ML)")
-    metrics = evaluate_autoencoder(encoder_ml, decoder_ml, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params, feedback_model=feedback_model)
+    metrics = evaluate_autoencoder(encoder_ml, decoder_ml, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params, feedback_model=feedback_model)
     for key in results['ml']:
         results['ml'][key].append(metrics[key])
     
     # QPSK
-    ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type="Rayleigh"))
+    ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type=chann_type))
 
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
@@ -188,18 +189,6 @@ plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
 plt.title('Comparaison des performances de transmission : BER')
-plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-plt.legend()
-plt.show()
-
-# Tracé SER vs SNR
-plt.figure(figsize=(10, 6))
-plt.semilogy(snr_values, results['perfect']['ser'], 'b-o', label='CSI parfait')
-plt.semilogy(snr_values, results['noisy']['ser'], 'r--s', label='feedback bruité (sans ML)')
-plt.semilogy(snr_values, results['ml']['ser'], 'g-.d', label='feedback bruité (avec ML)')
-plt.xlabel('SNR (dB)')
-plt.ylabel('SER')
-plt.title('Comparaison des performances de transmission : SER')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
 plt.show()

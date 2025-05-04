@@ -20,11 +20,11 @@ train = True
 if not os.path.exists('saved_models'):
     os.makedirs('saved_models')
 
-def save_models(encoder, decoder, feedback_model=None, prefix=''):
-    torch.save(encoder.state_dict(), f'saved_models/{prefix}encoder.pth')
-    torch.save(decoder.state_dict(), f'saved_models/{prefix}decoder.pth')
+def save_models(encoder, decoder, feedback_model=None, prefix='', chann_type='AWGN'):
+    torch.save(encoder.state_dict(), f'saved_models/{prefix}encoder_{chann_type}.pth')
+    torch.save(decoder.state_dict(), f'saved_models/{prefix}decoder_{chann_type}.pth')
     if feedback_model is not None:
-        torch.save(feedback_model.state_dict(), f'saved_models/{prefix}feedback_model.pth')
+        torch.save(feedback_model.state_dict(), f'saved_models/{prefix}feedback_{chann_type}.pth')
 
 def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, use_feedback = False, snr_feedback = None, compression_level = None, delay = None, sigma_CSI=0.5, binary=False, use_ml_feedback=False):
     """
@@ -34,7 +34,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
         m (int): Nombre de messages possibles.
         n (int): Dimension du signal encodé.
         snr_db (float): Rapport signal/bruit principal (canal direct).
-        chann_type (str): Type de canal (ex: "Rayleigh").
+        chann_type (str): Type de canal (ex: "AWGN").
         batch_size (int): Taille du batch.
         n_epochs (int): Nombre d'époques d'entraînement.
         lr (float): Taux d'apprentissage.
@@ -154,27 +154,29 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     return encoder, decoder, feedback_model, errors, feedback_losses
 
+chann_type = "AWGN"
+
 # Entraînement classique (sans feedback)
 print("1. Training with perfect CSI...")
-encoder_perfect, decoder_perfect, _, errors_perfect, _ = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=20000, lr=0.001,
+encoder_perfect, decoder_perfect, _, errors_perfect, _ = train_autoencoder(m=16, n=7, snr_db=7, chann_type="AWGN", batch_size=64, n_epochs=20000, lr=0.001,
                                                     clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=0.0, use_feedback=False)
 
-save_models(encoder_perfect, decoder_perfect, prefix='perfect_')
+save_models(encoder_perfect, decoder_perfect, prefix='perfect_', chann_type=chann_type)
 
 # Entraînement avec Feedback bruité sans correction ML
 print("\n2. Training with noisy feedback (no ML)...")
-encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder(m=16, n=7, snr_db=7,chann_type="Rayleigh", batch_size=64, n_epochs=20000, lr=0.001,
+encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder(m=16, n=7, snr_db=7,chann_type="AWGN", batch_size=64, n_epochs=20000, lr=0.001,
                                                                 clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1, use_feedback=True,
                                                                 snr_feedback=7, compression_level=4, delay=2, binary=False, use_ml_feedback=False)
 
-save_models(encoder_feedback, decoder_feedback, prefix='noisy_')
+save_models(encoder_feedback, decoder_feedback, prefix='noisy_', chann_type=chann_type)
 
 print("\n3. Training with noisy feedback (with ML)...")
-encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder(16, 7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=20000, lr=0.001, 
+encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder(16, 7, snr_db=7, chann_type="AWGN", batch_size=64, n_epochs=20000, lr=0.001, 
                                                                                        clipping=0.5, plot=100, stop_value=0.0001, sigma_CSI=1, use_feedback=True,
                                                                                        snr_feedback=7, compression_level=4, delay=2, binary=False, use_ml_feedback=True)
 
-save_models(encoder_ml, decoder_ml, feedback_model, prefix='ml_')
+save_models(encoder_ml, decoder_ml, feedback_model, prefix='ml_', chann_type=chann_type)
 
 
 # Tracer les courbes d'entraînement
