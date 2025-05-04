@@ -139,8 +139,8 @@ encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann
 encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_type=chann_type)
 
 # Paramètres d'évaluation
-snr_values = np.arange(-5, 30, 2)
-n_samples = 10000
+snr_values = np.arange(-5, 10, 2)
+n_samples = 20000
 
 # Stockage des résultats
 results = {
