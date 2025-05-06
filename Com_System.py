@@ -27,28 +27,17 @@ def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
     bit_pairs = bits.reshape(-1, 2)
     symbols = (2 * bit_pairs[:, 0] - 1) + 1j * (2 * bit_pairs[:, 1] - 1)  
     symbols /= np.sqrt(2)  # Normalisation de la puissance
-
-    # Convertir SNR de dB en échelle linéaire
-    snr_linear = 10 ** (snr_db / 10)
-    noise_power = 1 / (2 * snr_linear)  # Variance du bruit
-    noise = np.sqrt(noise_power) * (np.random.randn(len(symbols)) + 1j * np.random.randn(len(symbols)))
+    symbols = torch.tensor(symbols, dtype=torch.cfloat)
 
     # Appliquer les effets du canal
     if channel_type == "AWGN":
-        received_symbols = symbols + noise
+        _, _, received_symbols, _, _, _ = channel(symbols, snr_db, chann_type="AWGN")
 
     elif channel_type == "Rayleigh":
-        h = (np.random.randn(len(symbols)) + 1j * np.random.randn(len(symbols))) / np.sqrt(2)
-        received_symbols = h * symbols + noise
-        received_symbols /= h  # Égalisation
+        _, _, received_symbols, _, _, _ = channel(symbols, snr_db, chann_type="Rayleigh")
 
     elif channel_type == "Rician":
-        K = 3  # Facteur K du canal Rician
-        h_los = np.ones(len(symbols))  # Composante LOS
-        h_nlos = (np.random.randn(len(symbols)) + 1j * np.random.randn(len(symbols))) / np.sqrt(2)
-        h = np.sqrt(K / (K + 1)) * h_los + np.sqrt(1 / (K + 1)) * h_nlos
-        received_symbols = h * symbols + noise
-        received_symbols /= h  # Égalisation
+        _, _, received_symbols, _, _, _ = channel(symbols, snr_db, chann_type="Rician")
 
 
     else:
@@ -173,5 +162,5 @@ def test_rayleigh_with_qpsk(snr_db_values, n_symbols=10000):
     plt.show()
 
 
-snr_db_values = np.arange(-5, 30, 2)
+snr_db_values = np.arange(-5, 20, 2)
 test_rayleigh_with_qpsk(snr_db_values)

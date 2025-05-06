@@ -6,7 +6,7 @@ import os
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
-from utils import count_errors, plot_constellations
+from utils import plot_constellations
 from com_System import qpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -139,8 +139,8 @@ encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann
 encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_type=chann_type)
 
 # Paramètres d'évaluation
-snr_values = np.arange(-5, 30, 2)
-n_samples = 20000
+snr_values = np.arange(-5, 20, 2)
+n_samples = 50000
 
 # Stockage des résultats
 results = {
