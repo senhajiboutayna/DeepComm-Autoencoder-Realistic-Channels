@@ -23,36 +23,73 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
         h_hat : Estimation bruitée du canal
     """
     snr_lin = 10**(snr_db / 10)  # Convertir SNR dB en linéaire
-    n0 = 1 / snr_lin  # Variance du bruit (normalisée)
-    sigma_noise = np.sqrt(n0 / 2)  # Écart-type du bruit
-
+        
     if chann_type == "AWGN":
         h = torch.ones_like(x)  # Canal AWGN = pas d'effet de fading, donc h = 1
+        
+        # Calcul de la puissance du signal
+        signal_power = torch.mean(torch.abs(x)**2)
+        noise_power = signal_power / snr_lin
+        sigma_noise = torch.sqrt(noise_power / 2)
+        
         noise = sigma_noise * torch.randn_like(x)  # Bruit Gaussien
         x_channel = h * x + noise
         print(f"Mean of noise - AWGN: {torch.mean(noise)}, Std of noise - AWGN: {torch.std(noise)}")
 
     elif chann_type == "Rayleigh":
-        # Fading Rayleigh (module d'un signal complexe gaussien)
-        h = torch.sqrt(torch.randn_like(x) ** 2 + torch.randn_like(x) ** 2) / np.sqrt(2)
+        # Génération correcte du canal Rayleigh avec normalisation appropriée
+        h_real = torch.randn_like(x)
+        h_imag = torch.randn_like(x)
+        h = torch.sqrt(h_real**2 + h_imag**2) / torch.sqrt(torch.tensor(2.0))
+        
+        # Normalisation pour assurer que E[|h|²] = 1
+        h = h / torch.sqrt(torch.mean(h**2))
+        
+        # Application du fading
+        x_faded = h * x
+        
+        # Calcul de la puissance du signal après fading
+        signal_power = torch.mean(torch.abs(x_faded)**2)
+        noise_power = signal_power / snr_lin
+        sigma_noise = torch.sqrt(noise_power / 2)
+        
         noise = sigma_noise * torch.randn_like(x)
-        x_channel = h * x + noise  # Application du fading
+        x_channel = x_faded + noise
+        
         print(f"Mean x_channel - Rayleigh: {torch.mean(x_channel)}, Std x_channel - Rayleigh: {torch.std(x_channel)}")
+        print(f"Mean of h - Rayleigh: {torch.mean(h)}, Std of h - Rayleigh: {torch.std(h)}")
+        print(f"Mean h^2 - Rayleigh: {torch.mean(h**2)}")  # Devrait être proche de 1
 
     elif chann_type == "Rician":
         # Fading Rician = Composante directe + diffusion (Rayleigh)
         K = torch.tensor(K_rician, dtype=torch.float32)  # Facteur K
-        s = np.sqrt(K)  # Composante directe (LOS)
-        sigma_fading = np.sqrt(1 / (2 * (K + 1)))  # Composante diffusée (NLOS)
-
-         # Génération du coefficient de fading Rician
-        h_real = s + sigma_fading * torch.randn_like(x)
-        h_imag = sigma_fading * torch.randn_like(x)
-        h = torch.sqrt(h_real**2 + h_imag**2)  # Module du canal
-    
-        noise = sigma_noise * torch.randn_like(x)   # Bruit Gaussien
-        x_channel = h * x + noise   # Application du fading
+        
+        # Paramètres du canal Rician
+        v = torch.sqrt(K / (K + 1))  # Composante directe (LOS)
+        sigma = torch.sqrt(1 / (2 * (K + 1)))  # Composante diffusée (NLOS)
+         
+        # Génération du coefficient de fading Rician
+        h_real = v + sigma * torch.randn_like(x)
+        h_imag = sigma * torch.randn_like(x)
+        h = torch.sqrt(h_real**2 + h_imag**2)
+        
+        # Normalisation pour assurer que E[|h|²] = 1
+        h = h / torch.sqrt(torch.mean(h**2))
+        
+        # Application du fading
+        x_faded = h * x
+        
+        # Calcul de la puissance du signal après fading
+        signal_power = torch.mean(torch.abs(x_faded)**2)
+        noise_power = signal_power / snr_lin
+        sigma_noise = torch.sqrt(noise_power / 2)
+        
+        noise = sigma_noise * torch.randn_like(x)
+        x_channel = x_faded + noise
+        
         print(f"Mean x_channel - Rician: {torch.mean(x_channel)}, Std x_channel - Rician: {torch.std(x_channel)}")
+        print(f"Mean of h - Rician: {torch.mean(h)}, Std of h - Rician: {torch.std(h)}")
+        print(f"Mean h^2 - Rician: {torch.mean(h**2)}")  # Devrait être proche de 1
 
     else:
         raise ValueError(f"Type de canal non supporté: {chann_type}")
@@ -72,7 +109,7 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     # Égalisation avec CSI bruité
     x_received_CSI = x_channel / h_hat 
 
-    return x_channel,x_channel_CSI, x_received, x_received_CSI, h, h_hat
+    return x_channel, x_channel_CSI, x_received, x_received_CSI, h, h_hat
 
 
 def plot_channel_distribution(snr_db=10, n_samples=10000, chann_type="AWGN", K_rician=3):

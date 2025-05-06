@@ -154,25 +154,26 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     return encoder, decoder, feedback_model, errors, feedback_losses
 
-chann_type = "Rician"
+chann_type = "Rayleigh"
+n_epochs = 100000
 
 # Entraînement classique (sans feedback)
 print("1. Training with perfect CSI...")
-encoder_perfect, decoder_perfect, _, errors_perfect, _ = train_autoencoder(m=16, n=7, snr_db=7, chann_type=chann_type, batch_size=64, n_epochs=20000, lr=0.001,
+encoder_perfect, decoder_perfect, _, errors_perfect, _ = train_autoencoder(m=16, n=7, snr_db=7, chann_type=chann_type, batch_size=64, n_epochs=n_epochs, lr=0.001,
                                                     clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=0.0, use_feedback=False)
 
 save_models(encoder_perfect, decoder_perfect, prefix='perfect_', chann_type=chann_type)
 
 # Entraînement avec Feedback bruité sans correction ML
 print("\n2. Training with noisy feedback (no ML)...")
-encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder(m=16, n=7, snr_db=7,chann_type=chann_type, batch_size=64, n_epochs=20000, lr=0.001,
+encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder(m=16, n=7, snr_db=7,chann_type=chann_type, batch_size=64, n_epochs=n_epochs, lr=0.001,
                                                                 clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1, use_feedback=True,
                                                                 snr_feedback=7, compression_level=4, delay=2, binary=False, use_ml_feedback=False)
 
 save_models(encoder_feedback, decoder_feedback, prefix='noisy_', chann_type=chann_type)
 
 print("\n3. Training with noisy feedback (with ML)...")
-encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder(16, 7, snr_db=7, chann_type=chann_type, batch_size=64, n_epochs=20000, lr=0.001, 
+encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder(16, 7, snr_db=7, chann_type=chann_type, batch_size=64, n_epochs=n_epochs, lr=0.001, 
                                                                                        clipping=0.5, plot=100, stop_value=0.0001, sigma_CSI=1, use_feedback=True,
                                                                                        snr_feedback=7, compression_level=4, delay=2, binary=False, use_ml_feedback=True)
 
