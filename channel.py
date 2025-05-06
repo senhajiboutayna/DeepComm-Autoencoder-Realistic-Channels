@@ -58,7 +58,6 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
         
         print(f"Mean x_channel - Rayleigh: {torch.mean(x_channel)}, Std x_channel - Rayleigh: {torch.std(x_channel)}")
         print(f"Mean of h - Rayleigh: {torch.mean(h)}, Std of h - Rayleigh: {torch.std(h)}")
-        print(f"Mean h^2 - Rayleigh: {torch.mean(h**2)}")  # Devrait être proche de 1
 
     elif chann_type == "Rician":
         # Fading Rician = Composante directe + diffusion (Rayleigh)
@@ -89,7 +88,6 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
         
         print(f"Mean x_channel - Rician: {torch.mean(x_channel)}, Std x_channel - Rician: {torch.std(x_channel)}")
         print(f"Mean of h - Rician: {torch.mean(h)}, Std of h - Rician: {torch.std(h)}")
-        print(f"Mean h^2 - Rician: {torch.mean(h**2)}")  # Devrait être proche de 1
 
     else:
         raise ValueError(f"Type de canal non supporté: {chann_type}")
@@ -100,7 +98,12 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
         h_hat = torch.clamp(h_hat, min=0.5, max=1.5)  # Garde une variation plus réaliste
         x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
     else:
-        h_hat = torch.clamp(h + sigma_CSI * torch.abs(torch.randn_like(h)), min=0.1)
+        # Pour le canal Rayleigh, on applique le clamp uniquement sur l'amplitude
+        h_hat = h + sigma_CSI * torch.randn_like(h)  # Bruit complexe
+        h_hat_amplitude = torch.abs(h_hat)
+        h_hat_amplitude = torch.clamp(h_hat_amplitude, min=0.1)
+        # Reconstruire le nombre complexe avec la nouvelle amplitude et la phase originale
+        h_hat = h_hat_amplitude * torch.exp(1j * torch.angle(h_hat))
         x_channel_CSI = h_hat * x + noise
 
     # Égalisation avec CSI parfait

@@ -1,5 +1,8 @@
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
+
+from channel import channel
 
 def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
     """
@@ -151,3 +154,24 @@ plt.legend()
 plt.grid()
 plt.show()
 """
+
+def test_rayleigh_with_qpsk(snr_db_values, n_symbols=10000):
+    """Test QPSK transmission through Rayleigh channel without ML"""
+    ber_results = []
+    
+    for snr_db in snr_db_values:
+        ber = qpsk_communication(snr_db,num_bits=n_symbols, channel_type="Rayleigh")
+        ber_results.append(ber.item())
+    
+    # Plot
+    plt.semilogy(snr_db_values, ber_results, 'o-', label="Rayleigh")
+    plt.xlabel("SNR (dB)")
+    plt.ylabel("BER")
+    plt.title("Performance QPSK sur canal Rayleigh")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+
+snr_db_values = np.arange(-5, 30, 2)
+test_rayleigh_with_qpsk(snr_db_values)
