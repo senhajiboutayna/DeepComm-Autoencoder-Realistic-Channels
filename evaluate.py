@@ -5,15 +5,15 @@ import time
 import os
 
 from channel import channel, feedback_csi
-from models import Encoder, Decoder, FeedbackCorrection
+from models import Encoder, Decoder, FeedbackCorrection, TemporalEncoder, TemporalDecoder
 from utils import plot_constellations
 from com_System import qpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 def load_models(m, n, prefix='', chann_type='AWGN'):
-    encoder = Encoder(m=m, n=n).to(device)
-    decoder = Decoder(m=m, n=n).to(device)
+    encoder = TemporalEncoder(m=m, n=n).to(device)
+    decoder = TemporalDecoder(m=m, n=n).to(device)
     
     encoder.load_state_dict(torch.load(f'saved_models/{prefix}encoder_{chann_type}.pth'))
     decoder.load_state_dict(torch.load(f'saved_models/{prefix}decoder_{chann_type}.pth'))
@@ -140,7 +140,7 @@ encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_t
 
 # Paramètres d'évaluation
 snr_values = np.arange(-5, 20, 2)
-n_samples = 20000
+n_samples = 200
 
 # Stockage des résultats
 results = {

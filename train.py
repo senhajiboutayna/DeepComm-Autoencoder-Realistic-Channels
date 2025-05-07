@@ -9,7 +9,7 @@ import os
 import matplotlib.pyplot as plt
 
 from channel import channel, feedback_csi
-from models import Encoder, Decoder, FeedbackCorrection
+from models import Encoder, Decoder, FeedbackCorrection, TemporalEncoder, TemporalDecoder
 from utils import MemoryMessages, count_errors
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -55,8 +55,8 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     k = math.log2(m)
 
-    encoder = Encoder(m=m, n=n).to(device)
-    decoder = Decoder(m=m, n=n).to(device)
+    encoder = TemporalEncoder(m=m, n=n).to(device)
+    decoder = TemporalDecoder(m=m, n=n).to(device)
 
     # Modèle pour améliorer le feedback CSI
     feedback_model = None
@@ -155,7 +155,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
     return encoder, decoder, feedback_model, errors, feedback_losses
 
 chann_type = "Rayleigh"
-n_epochs = 50000
+n_epochs = 20000
 
 # Entraînement classique (sans feedback)
 print("1. Training with perfect CSI...")
