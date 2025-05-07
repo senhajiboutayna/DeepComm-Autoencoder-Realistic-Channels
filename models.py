@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -67,12 +68,12 @@ class Decoder(nn.Module):
 
     def forward(self, y):
 
-        y = y.view(-1, self.n)  
+        y = y.view(-1, self.n) 
 
         # Decoding phase
         y = self.linear_relu(y)
-        y = self.linear_out(y)
-        
+        y = self.linear_out(y) 
+
         return y
     
 
@@ -93,155 +94,68 @@ class FeedbackCorrection(nn.Module):
             nn.Linear(hidden_dim, input_dim),
             nn.Tanh(),
         )
+
+        self.attention = nn.MultiheadAttention(
+            embed_dim=input_dim,
+            num_heads=4,
+            dropout=0.1
+        )
     
     def forward(self, x):
+
+        # Ajout d'attention spatiale
+        x = x.unsqueeze(0)  # [1, batch, features]
+        x, _ = self.attention(x, x, x)
+        x = x.squeeze(0)
+
         encoder = self.encoder(x)
         decoder = self.decoder(encoder)
         return decoder
 
-class TemporalEncoder(nn.Module):
-    """
-    Encodeur avec capacité d'adaptation temporelle pour gérer le fast fading.
-    """
-    def __init__(self, m, n, hidden_dim=512, seq_len=10):
-        super(TemporalEncoder, self).__init__()
-
+class RobustEncoder(nn.Module):
+    def __init__(self, m, n):
+        super().__init__()
+        self.m = m
         self.n = n
-        self.seq_len = seq_len  # Longueur de la séquence temporelle à considérer
 
-        # Embedding initial des symboles
-        self.embedding = nn.Embedding(num_embeddings=m, embedding_dim=m)
-
-        # Couche LSTM pour capturer les dépendances temporelles
-        self.lstm = nn.LSTM(
-            input_size=m,
-            hidden_size=hidden_dim,
-            num_layers=2,
-            batch_first=True,
-            dropout=0.2,
-            bidirectional=True
-        )
-
-        # Mécanisme d'attention pour se concentrer sur les parties importantes du signal
-        self.attention = nn.MultiheadAttention(
-            embed_dim=hidden_dim*2,  # *2 car bidirectionnel
-            num_heads=4,
-            dropout=0.1
-        )
-
-        # Projection finale vers l'espace du canal
-        self.projection = nn.Sequential(
-            nn.Linear(hidden_dim*2, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, n)
-        )
+        # Embedding layer
+        self.embed = nn.Embedding(m, m)
         
-        # Normalisation de la puissance
-        self.normalization = nn.BatchNorm1d(num_features=n)
+        # Modifier les conv1d pour gérer correctement les dimensions
+        self.conv1 = nn.Conv1d(1, 16, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv1d(16, 32, kernel_size=3, padding=1)
+        self.attention = nn.MultiheadAttention(embed_dim=32, num_heads=4)
+        self.fc = nn.Linear(32, n)
+        self.norm = nn.BatchNorm1d(n)
         
-        self.init_weights()
-
-    def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                torch.nn.init.xavier_normal_(m.weight)
-                if m.bias is not None:
-                    torch.nn.init.zeros_(m.bias)
-    
     def forward(self, x):
-        # Input x shape: [batch_size]
-        
-        # Create sequence by expanding to seq_len
-        # This step might need to be adapted depending on your actual input format
-        if x.dim() == 1:
-            # If x is just batch_size, we expand it to create a sequence
-            x = x.unsqueeze(1).expand(-1, self.seq_len)
-        
-        # Embedding: [batch_size, seq_len] -> [batch_size, seq_len, embedding_dim]
-        x = self.embedding(x)
-        
-        # LSTM expects [batch_size, seq_len, input_size]
-        # No need for additional unsqueeze
-        lstm_out, _ = self.lstm(x)  # [batch_size, seq_len, hidden_dim*2]
+        # x shape: [batch_size, 1]
+        if x.dim() > 1:
+            x = self.embed(x.squeeze(1))
+        else:
+            x = self.embed(x)
+        x = x.unsqueeze(1)  # [batch_size, 1, embedding_dim] pour conv1d
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = x.permute(2, 0, 1)  # [seq_len, batch_size, features] pour attention
+        x, _ = self.attention(x, x, x)
+        x = x.mean(dim=0)  # Pooling temporel [batch_size, features]
+        x = self.fc(x)
+        x = self.norm(x)
+        return x / torch.norm(x, p=2, dim=1, keepdim=True) * np.sqrt(x.size(1))
 
-        # Mécanisme d'attention
-        # Transpose for attention: [seq_len, batch_size, hidden_dim*2]
-        lstm_out = lstm_out.transpose(0, 1)
-        attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)
-        attn_out = attn_out.transpose(0, 1)  # [batch_size, seq_len, hidden_dim*2]
-
-        # On ne garde que le dernier état (ou on peut faire une moyenne)
-        feature = attn_out[:, -1, :]  # [batch_size, hidden_dim*2]
-
-        # Projection finale
-        y = self.projection(feature)  # [batch_size, n]
-
-        # Normalisation de la puissance
-        y = self.normalization(y)
-        y = y / torch.norm(y, p=2, dim=1, keepdim=True) * np.sqrt(y.size(1))
-
-        return y
-    
-
-class TemporalDecoder(nn.Module):
-    """
-    Décodeur avec capacité d'adaptation temporelle pour gérer le fast fading.
-    """
-    def __init__(self, m, n, hidden_dim=512):
-        super(TemporalDecoder, self).__init__()
+class RobustDecoder(nn.Module):
+    def __init__(self, m, n):
+        super().__init__()
+        self.lstm = nn.LSTM(n, 64, num_layers=2, bidirectional=True)
+        self.attention = nn.MultiheadAttention(embed_dim=128, num_heads=4)
+        self.fc1 = nn.Linear(128, m)
+        self.fc2 = nn.Linear(m, m)
         
-        self.n = n
-        
-        # Module d'estimation du canal pour aider à compenser les variations
-        self.channel_estimator = nn.Sequential(
-            nn.Linear(n, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, n),
-            nn.Tanh()
-        )
-        
-        # Décodeur récurrent
-        self.gru = nn.GRU(
-            input_size=n,
-            hidden_size=hidden_dim,
-            num_layers=2,
-            batch_first=True,
-            dropout=0.2
-        )
-        
-        # Projection finale vers l'espace des symboles
-        self.projection = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim//2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim//2, m),
-            nn.LogSoftmax(dim=1)
-        )
-        
-        self.init_weights()
-
-    def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                torch.nn.init.xavier_normal_(m.weight)
-                if m.bias is not None:
-                    torch.nn.init.zeros_(m.bias)
-
     def forward(self, y):
-        # y: [batch_size, n] (la sortie du canal)
-        
-        # Reshape si nécessaire
-        y = y.view(-1, self.n)
-        
-        # Estimation et compensation du canal (optionnel)
-        channel_estimate = self.channel_estimator(y)
-        y_compensated = y + channel_estimate  # Compensation adaptative
-        
-        # Reshape pour GRU (ajouter dimension temporelle)
-        y_compensated = y_compensated.unsqueeze(1)  # [batch_size, 1, n]
-        
-        gru_out, _ = self.gru(y_compensated)  # [batch_size, 1, hidden_dim]
-        
-        # Projection finale
-        y = self.projection(gru_out.squeeze(1))  # [batch_size, m]
-        
-        return y
+        y = y.unsqueeze(0).repeat(4, 1, 1)  # Créer une séquence
+        y, _ = self.lstm(y)
+        y, _ = self.attention(y, y, y)
+        y = y.mean(dim=0)  # Pooling temporel
+        y = F.relu(self.fc1(y))
+        return F.log_softmax(self.fc2(y), dim=1)
