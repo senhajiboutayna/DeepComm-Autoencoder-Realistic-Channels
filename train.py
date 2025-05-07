@@ -155,7 +155,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
     return encoder, decoder, feedback_model, errors, feedback_losses
 
 chann_type = "Rayleigh"
-n_epochs = 10000
+n_epochs = 50000
 
 # Entraînement classique (sans feedback)
 print("1. Training with perfect CSI...")

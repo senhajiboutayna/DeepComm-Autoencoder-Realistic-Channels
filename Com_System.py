@@ -93,30 +93,19 @@ def bpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
     # BPSK modulation: 0 -> -1, 1 -> +1
     symbols = 2 * bits - 1  
 
-    # Convert SNR from dB to linear scale
-    snr_linear = 10 ** (snr_db / 10)
-    noise_power = 1 / (2 * snr_linear)  # AWGN noise variance
-    noise = np.sqrt(noise_power) * np.random.randn(num_bits)  # Gaussian noise
-
-    # Apply channel effects
+    # Appliquer les effets du canal
     if channel_type == "AWGN":
-        received_signal = symbols + noise
+        _, _, received_signal, _, _, _ = channel(symbols, snr_db, chann_type="AWGN")
 
     elif channel_type == "Rayleigh":
-        h = (np.random.randn(num_bits) + 1j * np.random.randn(num_bits)) / np.sqrt(2)
-        received_signal = h * symbols + noise
-        received_signal /= h  # Equalization
+        _, _, received_signal, _, _, _ = channel(symbols, snr_db, chann_type="Rayleigh")
 
     elif channel_type == "Rician":
-        K = 3  # Rician K-factor
-        h_los = np.ones(num_bits)
-        h_nlos = (np.random.randn(num_bits) + 1j * np.random.randn(num_bits)) / np.sqrt(2)
-        h = np.sqrt(K / (K + 1)) * h_los + np.sqrt(1 / (K + 1)) * h_nlos
-        received_signal = h * symbols + noise
-        received_signal /= h  # Equalization
+        _, _, received_signal, _, _, _ = channel(symbols, snr_db, chann_type="Rician")
+
 
     else:
-        raise ValueError(f"Unsupported channel type: {channel_type}")
+        raise ValueError(f"Type de canal non supporté: {channel_type}")
 
     # BPSK demodulation
     detected_bits = (received_signal > 0).astype(int)
@@ -144,25 +133,3 @@ plt.grid()
 plt.show()
 """
 
-def test_rayleigh_with_qpsk(snr_db_values, n_bits):
-    """Test QPSK transmission through Rayleigh channel without ML"""
-    ber_results = []
-    
-    for snr_db in snr_db_values:
-        ber = qpsk_communication(snr_db,num_bits=n_bits, channel_type="Rayleigh")
-        ber_results.append(ber.item())
-    
-    # Plot
-    plt.semilogy(snr_db_values, ber_results, 'o-', label="Rayleigh")
-    plt.xlabel("SNR (dB)")
-    plt.ylabel("BER")
-    plt.title("Performance QPSK sur canal Rayleigh")
-    plt.grid(True)
-    plt.legend()
-    plt.show()
-
-
-snr_db_values = np.arange(-5, 20, 2)
-n_bits = 10000
-
-#test_rayleigh_with_qpsk(snr_db_values, n_bits)
