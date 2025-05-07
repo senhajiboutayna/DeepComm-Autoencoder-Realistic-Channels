@@ -144,12 +144,12 @@ plt.grid()
 plt.show()
 """
 
-def test_rayleigh_with_qpsk(snr_db_values, n_symbols=10000):
+def test_rayleigh_with_qpsk(snr_db_values, n_bits):
     """Test QPSK transmission through Rayleigh channel without ML"""
     ber_results = []
     
     for snr_db in snr_db_values:
-        ber = qpsk_communication(snr_db,num_bits=n_symbols, channel_type="Rayleigh")
+        ber = qpsk_communication(snr_db,num_bits=n_bits, channel_type="Rayleigh")
         ber_results.append(ber.item())
     
     # Plot
@@ -163,4 +163,6 @@ def test_rayleigh_with_qpsk(snr_db_values, n_symbols=10000):
 
 
 snr_db_values = np.arange(-5, 20, 2)
-test_rayleigh_with_qpsk(snr_db_values)
+n_bits = 10000
+
+#test_rayleigh_with_qpsk(snr_db_values, n_bits)

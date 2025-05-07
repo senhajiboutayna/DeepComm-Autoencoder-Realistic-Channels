@@ -57,9 +57,14 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     else:
         raise ValueError(f"Type de canal non supporté: {chann_type}")
     
-    # Ajout du bruit sur l'estimation du canal
-    h_hat = h + sigma_CSI * torch.abs(torch.randn_like(h))
-    x_channel_CSI = h_hat * x + noise
+    # Ajout du bruit sur l'estimation du canal (CSI imparfait)
+    if chann_type == "AWGN":
+        h_hat = 1 + sigma_CSI * 0.1 * torch.randn_like(h)  # Réduit l'impact du bruit
+        h_hat = torch.clamp(h_hat, min=0.5, max=1.5)  # Garde une variation plus réaliste
+        x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
+    else:
+        h_hat = h + sigma_CSI * torch.abs(torch.randn_like(h))
+        x_channel_CSI = h_hat * x + noise
 
     # Égalisation avec CSI parfait
     x_received = x_channel / h  
