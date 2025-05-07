@@ -140,7 +140,7 @@ encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_t
 
 # Paramètres d'évaluation
 snr_values = np.arange(-5, 10, 2)
-n_samples = 100
+n_samples = 10000
 
 # Stockage des résultats
 results = {
