@@ -23,10 +23,10 @@ if not os.path.exists('saved_models'):
     os.makedirs('saved_models')
 
 def save_models(encoder, decoder, feedback_model=None, prefix='', chann_type='AWGN'):
-    torch.save(encoder.state_dict(), f'saved_models/{prefix}encoder_{chann_type}.pth')
-    torch.save(decoder.state_dict(), f'saved_models/{prefix}decoder_{chann_type}.pth')
+    torch.save(encoder.state_dict(), f'saved_models/{prefix}encoder_{chann_type}.pth', _use_new_zipfile_serialization=True)
+    torch.save(decoder.state_dict(), f'saved_models/{prefix}decoder_{chann_type}.pth', _use_new_zipfile_serialization=True)
     if feedback_model is not None:
-        torch.save(feedback_model.state_dict(), f'saved_models/{prefix}feedback_{chann_type}.pth')
+        torch.save(feedback_model.state_dict(), f'saved_models/{prefix}feedback_{chann_type}.pth', _use_new_zipfile_serialization=True)
 
 def fading_regularization(encoded):
     # Encourage une distribution robuste aux évanouissements
@@ -184,7 +184,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
     return encoder, decoder, feedback_model, errors, feedback_losses
 
 chann_type = "Rayleigh"
-n_epochs = 20000
+n_epochs = 50000
 batch_size = 64
 lr = 0.001
 snr_db = 10  # SNR initial, augmenté progressivement

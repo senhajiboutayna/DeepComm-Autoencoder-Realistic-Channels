@@ -5,23 +5,23 @@ import time
 import os
 
 from channel import channel, feedback_csi
-from models import Encoder, Decoder, FeedbackCorrection
+from models import Encoder, Decoder, FeedbackCorrection, RobustEncoder, RobustDecoder
 from utils import plot_constellations
 from com_System import qpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 def load_models(m, n, prefix='', chann_type='AWGN'):
-    encoder = Encoder(m=m, n=n).to(device)
-    decoder = Decoder(m=m, n=n).to(device)
+    encoder = RobustEncoder(m=m, n=n).to(device)
+    decoder = RobustDecoder(m=m, n=n).to(device)
     
-    encoder.load_state_dict(torch.load(f'saved_models/{prefix}encoder_{chann_type}.pth'))
-    decoder.load_state_dict(torch.load(f'saved_models/{prefix}decoder_{chann_type}.pth'))
+    encoder.load_state_dict(torch.load(f'saved_models/{prefix}encoder_{chann_type}.pth', weights_only=True))
+    decoder.load_state_dict(torch.load(f'saved_models/{prefix}decoder_{chann_type}.pth', weights_only=True))
     
     feedback_model = None
     if os.path.exists(f'saved_models/{prefix}feedback_model.pth'):
         feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=128).to(device)
-        feedback_model.load_state_dict(torch.load(f'saved_models/{prefix}feedback_{chann_type}.pth'))
+        feedback_model.load_state_dict(torch.load(f'saved_models/{prefix}feedback_{chann_type}.pth', weights_only=True))
     
     return encoder, decoder, feedback_model
 
@@ -139,8 +139,8 @@ encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann
 encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_type=chann_type)
 
 # Paramètres d'évaluation
-snr_values = np.arange(-5, 20, 2)
-n_samples = 20000
+snr_values = np.arange(-5, 10, 2)
+n_samples = 100
 
 # Stockage des résultats
 results = {

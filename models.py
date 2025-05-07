@@ -95,18 +95,7 @@ class FeedbackCorrection(nn.Module):
             nn.Tanh(),
         )
 
-        self.attention = nn.MultiheadAttention(
-            embed_dim=input_dim,
-            num_heads=4,
-            dropout=0.1
-        )
-    
     def forward(self, x):
-
-        # Ajout d'attention spatiale
-        x = x.unsqueeze(0)  # [1, batch, features]
-        x, _ = self.attention(x, x, x)
-        x = x.squeeze(0)
 
         encoder = self.encoder(x)
         decoder = self.decoder(encoder)
