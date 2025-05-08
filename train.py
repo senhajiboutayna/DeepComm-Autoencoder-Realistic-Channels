@@ -28,11 +28,6 @@ def save_models(encoder, decoder, feedback_model=None, prefix='', chann_type='AW
     if feedback_model is not None:
         torch.save(feedback_model.state_dict(), f'saved_models/{prefix}feedback_{chann_type}.pth', _use_new_zipfile_serialization=True)
 
-def fading_regularization(encoded):
-    # Encourage une distribution robuste aux évanouissements
-    mean_power = torch.mean(torch.abs(encoded)**2)
-    return F.mse_loss(mean_power, torch.ones_like(mean_power))
-
 def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, use_feedback = False, snr_feedback = None, compression_level = None, delay = None, sigma_CSI=0.5, binary=False, use_ml_feedback=False):
     """
     Entraîne l'autoencodeur en utilisant un feedback CSI bruité et compressé.
@@ -67,7 +62,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
     feedback_model = None
     if use_feedback and use_ml_feedback:
         feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=128).to(device)
-        feedback_optimizer = optim.Adam(feedback_model.parameters(), lr=lr*0.5)
+        feedback_optimizer = optim.Adam(feedback_model.parameters(), lr=lr)
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr)
     decoder_optimizer = optim.Adam(decoder.parameters(), lr=lr)
@@ -104,8 +99,6 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
             encoded_data = encoder(data)
 
-            # Régularisation pour les canaux Rayleigh
-            reg_loss = fading_regularization(encoded_data)
 
             # Gestion du feedback
             current_sigma_CSI = sigma_CSI
@@ -137,10 +130,10 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             # Calcul de la perte de feedback
             if use_feedback and use_ml_feedback:
                 feedback_loss = F.mse_loss(feedback_csi_value, h_true)
-                total_loss = main_loss + 0.1*feedback_loss + 0.01*reg_loss
+                total_loss = main_loss + 0.1*feedback_loss
                 epoch_feedback_loss += feedback_loss.item()
             else :
-                total_loss = main_loss + 0.01*reg_loss
+                total_loss = main_loss
 
             total_loss.backward()
 
