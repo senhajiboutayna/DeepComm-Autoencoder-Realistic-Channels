@@ -12,8 +12,8 @@ from com_System import qpsk_communication
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 def load_models(m, n, prefix='', chann_type='AWGN'):
-    encoder = RobustEncoder(m=m, n=n).to(device)
-    decoder = RobustDecoder(m=m, n=n).to(device)
+    encoder = Encoder(m=m, n=n).to(device)
+    decoder = Decoder(m=m, n=n).to(device)
     
     encoder.load_state_dict(torch.load(f'saved_models/{prefix}encoder_{chann_type}.pth', weights_only=True))
     decoder.load_state_dict(torch.load(f'saved_models/{prefix}decoder_{chann_type}.pth', weights_only=True))

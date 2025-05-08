@@ -55,8 +55,8 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
         encoder, decoder, errors: Modèles entraînés et liste des erreurs.
     """
 
-    encoder = RobustEncoder(m=m, n=n).to(device)
-    decoder = RobustDecoder(m=m, n=n).to(device)
+    encoder = Encoder(m=m, n=n).to(device)
+    decoder = Decoder(m=m, n=n).to(device)
 
     # Modèle pour améliorer le feedback CSI
     feedback_model = None
@@ -177,7 +177,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
     return encoder, decoder, feedback_model, errors, feedback_losses
 
 chann_type = "Rayleigh"
-n_epochs = 200000
+n_epochs = 50000
 batch_size = 64
 lr = 0.001
 snr_db = 10  # SNR initial, augmenté progressivement
