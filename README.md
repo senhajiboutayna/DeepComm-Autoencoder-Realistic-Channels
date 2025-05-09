@@ -24,7 +24,7 @@ Instead of assuming ideal AWGN channels, we integrate **fading models** (Rayleig
 │── 📄 train.py # Main training script
 │── 📄 utils.py # Utility functions
 │── 📂 saved_models # Folder to store trained models
-└── 📂 results # Generated plots and training logs
+└── 📂 plots # Generated plots
 ```
 
 

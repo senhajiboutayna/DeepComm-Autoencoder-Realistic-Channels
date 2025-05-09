@@ -170,12 +170,12 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     return encoder, decoder, feedback_model, errors, feedback_losses
 
-chann_type = "Rayleigh"
-n_epochs = 200000
-batch_size = 128
+chann_type = "AWGN"
+n_epochs = 10000
+batch_size = 64
 lr = 0.0001
-snr_db = 10  # SNR initial, augmenté progressivement
-clipping = 1
+snr_db = 3  # SNR initial, augmenté progressivement
+clipping = 0.5
 
 # Entraînement classique (sans feedback)
 print("1. Training with perfect CSI...")
@@ -210,6 +210,7 @@ plt.ylabel("BER")
 plt.title("Impact du Feedback Bruité sur l'Autoencodeur")
 plt.legend()
 plt.grid()
+plt.savefig(f"plots/{chann_type}_BER_epochs.png")
 
 if feedback_model is not None:
         plt.figure(figsize=(10, 6))
@@ -219,6 +220,7 @@ if feedback_model is not None:
         plt.title("Évolution de la perte du modèle de feedback")
         plt.legend()
         plt.grid()
+        plt.savefig(f"plots/{chann_type}_loss.png")
 
 plt.tight_layout()
 plt.show()

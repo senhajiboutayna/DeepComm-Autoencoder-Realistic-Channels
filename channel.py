@@ -30,14 +30,14 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
         h = torch.ones_like(x)  # Canal AWGN = pas d'effet de fading, donc h = 1
         noise = sigma_noise * torch.randn_like(x)  # Bruit Gaussien
         x_channel = h * x + noise
-        print(f"Mean of noise - AWGN: {torch.mean(noise)}, Std of noise - AWGN: {torch.std(noise)}")
+        #print(f"Mean of noise - AWGN: {torch.mean(noise)}, Std of noise - AWGN: {torch.std(noise)}")
 
     elif chann_type == "Rayleigh":
         # Fading Rayleigh (module d'un signal complexe gaussien)
         h = torch.sqrt(torch.randn_like(x) ** 2 + torch.randn_like(x) ** 2) / np.sqrt(2)
         noise = sigma_noise * torch.randn_like(x)
         x_channel = h * x + noise  # Application du fading
-        print(f"Mean x_channel - Rayleigh: {torch.mean(x_channel)}, Std x_channel - Rayleigh: {torch.std(x_channel)}")
+        #print(f"Mean x_channel - Rayleigh: {torch.mean(x_channel)}, Std x_channel - Rayleigh: {torch.std(x_channel)}")
 
     elif chann_type == "Rician":
         # Fading Rician = Composante directe + diffusion (Rayleigh)
@@ -52,7 +52,7 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     
         noise = sigma_noise * torch.randn_like(x)   # Bruit Gaussien
         x_channel = h * x + noise   # Application du fading
-        print(f"Mean x_channel - Rician: {torch.mean(x_channel)}, Std x_channel - Rician: {torch.std(x_channel)}")
+        #print(f"Mean x_channel - Rician: {torch.mean(x_channel)}, Std x_channel - Rician: {torch.std(x_channel)}")
 
     else:
         raise ValueError(f"Type de canal non supporté: {chann_type}")

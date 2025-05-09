@@ -7,7 +7,7 @@ import os
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
 from utils import plot_constellations, bler
-from com_System import qpsk_communication, bpsk_communication
+from com_System import qpsk, bpsk, bpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -134,7 +134,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 # Charger les modèles sauvegardés
 print("Chargement des modèles...")
 m, n, k = 16, 7, 4
-chann_type = 'Rayleigh'
+chann_type = 'AWGN'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type)
@@ -151,6 +151,7 @@ results = {
     'ml': {'ber': [], 'bler': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []}
 }
 ber_qpsk = []
+ber_bpsk = []
 
 # Boucle sur chaque SNR
 for snr in snr_values:
@@ -180,7 +181,10 @@ for snr in snr_values:
         results['ml'][key].append(metrics[key])
     
     # QPSK
-    ber_qpsk.append(qpsk_communication(m, n, snr_db=snr, num_bits=n_samples, channel_type=chann_type))
+    ber_qpsk.append(qpsk(m, n, snr_db=snr, num_bits=n_samples, chann_type=chann_type))
+
+    # BPSK + Hamming
+    ber_bpsk.append(bpsk_communication(m=m, n=n, snr_db=snr, n_blocks=n_samples, chann_type=chann_type))
 
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
@@ -188,11 +192,13 @@ plt.semilogy(snr_values, results['perfect']['ber'], 'b-o', label='CSI parfait')
 plt.semilogy(snr_values, results['noisy']['ber'], 'r--s', label='feedback bruité (sans ML)')
 plt.semilogy(snr_values, results['ml']['ber'], 'g-.d', label='feedback bruité (avec ML)')
 plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
+plt.semilogy(snr_values, ber_bpsk, 'm', label='BPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
 plt.title('Comparaison des performances de transmission : BER')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
+plt.savefig(f"plots/{chann_type}_BER.png")
 plt.show()
 
 # Tracé BLER vs SNR
@@ -202,7 +208,7 @@ plt.semilogy(snr_values, results['noisy']['bler'], 'r--s', label='feedback bruit
 plt.semilogy(snr_values, results['ml']['bler'], 'g-.d', label='feedback bruité (avec ML)')
 plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
 plt.xlabel('SNR (dB)')
-plt.ylabel('BER')
+plt.ylabel('BLER')
 plt.title('Comparaison des performances de transmission : BLER')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
