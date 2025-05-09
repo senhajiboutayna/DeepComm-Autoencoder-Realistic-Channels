@@ -20,7 +20,7 @@ def load_models(m, n, prefix='', chann_type='AWGN'):
     
     feedback_model = None
     if os.path.exists(f'saved_models/{prefix}feedback_model.pth'):
-        feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=128).to(device)
+        feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=128, robust=False).to(device)
         feedback_model.load_state_dict(torch.load(f'saved_models/{prefix}feedback_{chann_type}.pth', weights_only=True))
     
     return encoder, decoder, feedback_model
@@ -106,7 +106,6 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
             # Vérifier que la taille est un multiple de k
             num_symbols = predicted_message.shape[0]
             if num_symbols % k != 0:
-                print(f"Avertissement: Tronquage de {num_symbols % k} éléments pour correspondre à k={k}")
                 predicted_message = predicted_message[:num_symbols - (num_symbols % k)]
                 message = message[:num_symbols - (num_symbols % k)]
             total_symbol_errors += np.sum(np.any(predicted_message.reshape(-1, k) != message.reshape(-1, k), axis=1))
@@ -134,7 +133,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 # Charger les modèles sauvegardés
 print("Chargement des modèles...")
 m, n, k = 16, 7, 4
-chann_type = 'AWGN'
+chann_type = 'Rayleigh'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type)
