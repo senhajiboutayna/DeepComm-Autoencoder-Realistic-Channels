@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from channel import channel, feedback_csi
-from models import Encoder, Decoder, FeedbackCorrection, RobustEncoder, RobustDecoder
-from utils import MemoryMessages, count_errors
+from models import Encoder, Decoder, FeedbackCorrection
+from utils import MemoryMessages, count_errors, bler
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -81,12 +81,6 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
         epoch_errors = 0
         epoch_feedback_loss = 0
 
-        # SNR progressif
-        if epoch < n_epochs/2:
-            current_snr = min(snr_db, snr_db * (epoch / (n_epochs/2))) 
-        else : 
-            current_snr = snr_db
-
         while len(message) > 0:
             batch, targets_np = message.sample(batch_size)
             encoder_optimizer.zero_grad()
@@ -104,7 +98,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             current_sigma_CSI = sigma_CSI
             if use_feedback :
                 with torch.no_grad():
-                    _, _, _, _, h_true, _ = channel(encoded_data, current_snr, chann_type, sigma_CSI=sigma_CSI)
+                    _, _, _, _, h_true, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=sigma_CSI)
                 feedback_csi_value = feedback_csi(
                     h_true, 
                     snr_feedback if use_feedback else 0, 
@@ -117,7 +111,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
                 current_sigma_CSI = feedback_csi_value
                 
             # Passage par le canal    
-            _, data_channel, _, _, _, _ = channel(encoded_data, current_snr, chann_type=chann_type, sigma_CSI=current_sigma_CSI)
+            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=current_sigma_CSI)
             data_channel = torch.clamp(data_channel, -clipping, clipping)
 
             # Décodage
@@ -177,11 +171,11 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
     return encoder, decoder, feedback_model, errors, feedback_losses
 
 chann_type = "Rayleigh"
-n_epochs = 50000
-batch_size = 64
-lr = 0.001
+n_epochs = 200000
+batch_size = 128
+lr = 0.0001
 snr_db = 10  # SNR initial, augmenté progressivement
-clipping = 0.5
+clipping = 1
 
 # Entraînement classique (sans feedback)
 print("1. Training with perfect CSI...")

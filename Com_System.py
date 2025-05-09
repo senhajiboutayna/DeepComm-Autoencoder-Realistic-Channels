@@ -1,10 +1,14 @@
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+import math
 
 from channel import channel
 
-def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
+# To do block encoding (Hamming)
+from sk_dsp_comm import fec_block as block
+
+def qpsk_communication(m, n, snr_db, num_bits=10000, channel_type="AWGN"):
     """
     Simule une transmission QPSK et calcule le taux d'erreur binaire (BER).
 
@@ -16,6 +20,10 @@ def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
     Retourne :
         ber (float) : Taux d'erreur binaire.
     """
+
+    # Calcul du Nombre de Bits Nécessaires pour représenter m messages différents
+    k = int(math.log2(m))
+    
     # Assurer que le nombre de bits est pair (chaque symbole QPSK = 2 bits)
     if num_bits % 2 != 0:
         num_bits += 1
@@ -38,7 +46,6 @@ def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
 
     elif channel_type == "Rician":
         _, _, received_symbols, _, _, _ = channel(symbols, snr_db, chann_type="Rician")
-
 
     else:
         raise ValueError(f"Type de canal non supporté: {channel_type}")
@@ -103,7 +110,6 @@ def bpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
     elif channel_type == "Rician":
         _, _, received_signal, _, _, _ = channel(symbols, snr_db, chann_type="Rician")
 
-
     else:
         raise ValueError(f"Type de canal non supporté: {channel_type}")
 
@@ -133,3 +139,80 @@ plt.grid()
 plt.show()
 """
 
+def block_encoder(x, n, k):
+    """
+    This is going to be the definition of encoding using Hamming
+    Args:
+        x of shape (batch_size, k): Messages without encoding
+        n (int): Length of the encoded messages
+        k (int): Length of the actual messages
+    Returns:
+        y of shape (batch_size, n): Encoded messages with Hamming
+    """
+    # There is no need for encoding
+    # Si n=k, il n'y a pas besoin d'ajouter de bits de parité, car les messages d'entrée sont déjà à leur longueur maximale.
+    if n == k:
+        # Return as float because that the way encoder.hamm_encoder returns it
+        return x
+    
+    # We initialize the encoder with the number of parity bits that we need
+    # According to doc from block.fec_hamming
+    # Initialized with j. Where n = 2^j-1. k = n-j.
+    encoder = block.FECHamming(n-k)   # Initialisation de l'encodeur Hamming
+    """
+    block.FECHamming(n-k) : Initialise un encodeur Hamming avec n-k
+    n : Longueur totale du message encodé.
+    k : Longueur des bits d'information (message).
+    n-k : Nombre de bits de parité(de contole).
+    """
+    
+    # Allocation de l'espace pour les résultats
+    batch_size, _ = x.shape  ## batch_size : Nombre de messages dans le lot (exemple, 32 messages dans un batch).
+    # Pré-allocation :
+    ## Crée une matrice de zéros de taille (batch_size,n) pour stocker les messages encodés.
+    encoding_results = np.zeros((batch_size, n), dtype=int)
+    
+    # Encodage des Messages
+    for i, x_vec in enumerate(x):  # Boucle sur chaque message dans le batch 
+        encoding_results[i, :] = encoder.hamm_encoder(x_vec)
+    
+    return encoding_results
+
+
+def block_decoder(y, n, k):
+    """
+    This is going to be the definition of decoding using Hamming
+    Args:
+        x of shape (batch_size, n): Encoded messages
+        n (int): Length of the encoded messages
+        k (int): Length of the actual messages
+    Returns:
+        y of shape (batch_size, k): Decoded messages with Hamming
+    """
+    # There is no need for decoding
+    if n == k:
+        # Return as float because that the way encoder.hamm_decoder returns it
+        return y
+    
+    # We initialize the decoder with the number of parity bits that we need
+    # According to doc from block.fec_hamming
+    # Initialized with j. Where n = 2^j-1. k = n-j.
+    decoder = block.FECHamming(n-k)
+
+    # Vérification des données binaires
+    assert np.all(np.isin(y, [0, 1]))
+
+    # Convertir en tableau NumPy si nécessaire
+    if torch.is_tensor(y_vec):
+        y_vec = y_vec.cpu().numpy()
+    
+    # Get the batch size and pre-allocate adequate space for it
+    batch_size, _ = y.shape
+    decoding_results = np.zeros((batch_size, k), dtype=int)
+    
+    # Iterate over the batches and get the encoding for all of them
+    for i, y_vec in enumerate(y):
+        y_vec = np.round(y_vec).astype(int)  # Arrondir et convertir en int
+        decoding_results[i, :] = decoder.hamm_decoder(y_vec)
+    
+    return decoding_results

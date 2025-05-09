@@ -5,9 +5,9 @@ import time
 import os
 
 from channel import channel, feedback_csi
-from models import Encoder, Decoder, FeedbackCorrection, RobustEncoder, RobustDecoder
-from utils import plot_constellations
-from com_System import qpsk_communication
+from models import Encoder, Decoder, FeedbackCorrection
+from utils import plot_constellations, bler
+from com_System import qpsk_communication, bpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -52,6 +52,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     metrics = {
         'ber' : 0,
+        'bler' : 0,
         'ser' : 0,
         'capacity' : 0,
         'latency' : 0,
@@ -121,6 +122,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     # Calculer le BER et SER
     metrics['ber'] = total_errors / total_bits
+    metrics['bler'] = bler(message, predicted_message)
     metrics['ser'] = total_symbol_errors / n_samples
 
     # Capacité du canal (Shannon)
@@ -144,9 +146,9 @@ n_samples = 10000
 
 # Stockage des résultats
 results = {
-    'perfect': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []},
-    'noisy': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []},
-    'ml': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []}
+    'perfect': {'ber': [], 'bler': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []},
+    'noisy': {'ber': [], 'bler': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []},
+    'ml': {'ber': [], 'bler': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []}
 }
 ber_qpsk = []
 
@@ -178,7 +180,7 @@ for snr in snr_values:
         results['ml'][key].append(metrics[key])
     
     # QPSK
-    ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type=chann_type))
+    ber_qpsk.append(qpsk_communication(m, n, snr_db=snr, num_bits=n_samples, channel_type=chann_type))
 
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
@@ -189,6 +191,19 @@ plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
 plt.title('Comparaison des performances de transmission : BER')
+plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+plt.legend()
+plt.show()
+
+# Tracé BLER vs SNR
+plt.figure(figsize=(10, 6))
+plt.semilogy(snr_values, results['perfect']['bler'], 'b-o', label='CSI parfait')
+plt.semilogy(snr_values, results['noisy']['bler'], 'r--s', label='feedback bruité (sans ML)')
+plt.semilogy(snr_values, results['ml']['bler'], 'g-.d', label='feedback bruité (avec ML)')
+plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
+plt.xlabel('SNR (dB)')
+plt.ylabel('BER')
+plt.title('Comparaison des performances de transmission : BLER')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
 plt.show()
