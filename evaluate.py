@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import os
+import math
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
@@ -132,7 +133,8 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
 # Charger les modèles sauvegardés
 print("Chargement des modèles...")
-m, n, k = 16, 7, 4
+m, n = 4, 2
+k = int(math.log2(m))
 chann_type = 'Rayleigh'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type)
@@ -141,7 +143,7 @@ encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_t
 
 # Paramètres d'évaluation
 snr_values = np.arange(-5, 11, 2)
-n_samples = 10000
+n_samples = 1000
 
 # Stockage des résultats
 results = {

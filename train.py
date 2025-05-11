@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection, Transmitter, Receiver
-from utils import MemoryMessages, count_errors, bler, plot_constellation
+from utils import MemoryMessages, count_errors, plot_constellation
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -184,13 +184,13 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
     return encoder, decoder, feedback_model, errors, feedback_losses
 
 chann_type = "Rayleigh"
-m, n = 16, 7
+m, n = 4, 2
 use_robust_model = False
-n_epochs = 1000
+n_epochs = 5000
 batch_size = 64
 lr = 0.001
-snr_db = np.random.randint(-5, 20)  
-clipping = 0.5
+snr_db = 5  
+clipping = 0.7
 
 # Entraînement classique (sans feedback)
 print("1. Training with perfect CSI - snr_db = ", snr_db)

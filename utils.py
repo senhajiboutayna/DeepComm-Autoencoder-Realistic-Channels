@@ -92,8 +92,9 @@ def bler(x, y):
         batch_size = 10
     """
     
-    # Check where are the errors between received and transmitted
-    errors = (x != y)  ## Comparaison des Messages
+    # Check where are the errors between received and transmitted 
+    errors = np.not_equal(x, y)  ## Comparaison des Messages
+    errors = np.atleast_2d(errors)
     """
     Résultat : Un tableau booléen où chaque élément est True si le bit est incorrect.
     """
