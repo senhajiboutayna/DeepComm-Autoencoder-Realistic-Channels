@@ -183,13 +183,13 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     return encoder, decoder, feedback_model, errors, feedback_losses
 
-chann_type = "Rayleigh"
-m, n = 4, 2
+chann_type = "Rician"
+m, n = 16, 4
 use_robust_model = False
-n_epochs = 5000
+n_epochs = 1000
 batch_size = 64
 lr = 0.001
-snr_db = 5  
+snr_db = 2  
 clipping = 0.7
 
 # Entraînement classique (sans feedback)
