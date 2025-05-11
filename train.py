@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection, Transmitter, Receiver
-from utils import MemoryMessages, count_errors, bler
+from utils import MemoryMessages, count_errors, bler, plot_constellation
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -170,9 +170,9 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
         # Affichage de l'avancement
         if epoch % plot == 0:
-            log_str = f"Epoch {epoch}: Loss={losses[-1]:.4f}, BER={errors[-1]:.4f}"
+            log_str = f"Epoch {epoch}: Loss={losses[-1]}, BER={errors[-1]}"
             if use_ml_feedback:
-                log_str = f"Epoch {epoch}: Loss={losses[-1]:.4f}, BER={errors[-1]:.4f}, Feedback Loss={feedback_losses[-1]:.4f}"
+                log_str = f"Epoch {epoch}: Loss={losses[-1]}, BER={errors[-1]}, Feedback Loss={feedback_losses[-1]}"
             print(log_str)
 
         # Critère d'arrêt précoce
@@ -184,30 +184,31 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
     return encoder, decoder, feedback_model, errors, feedback_losses
 
 chann_type = "Rayleigh"
+m, n = 16, 7
 use_robust_model = False
-n_epochs = 20000
+n_epochs = 1000
 batch_size = 64
 lr = 0.001
-snr_db = 5  
+snr_db = np.random.randint(-5, 20)  
 clipping = 0.5
 
 # Entraînement classique (sans feedback)
-print("1. Training with perfect CSI...")
-encoder_perfect, decoder_perfect, _, errors_perfect, _ = train_autoencoder(m=16, n=7, snr_db=snr_db, chann_type=chann_type, batch_size=batch_size, n_epochs=n_epochs, lr=lr,
+print("1. Training with perfect CSI - snr_db = ", snr_db)
+encoder_perfect, decoder_perfect, _, errors_perfect, _ = train_autoencoder(m, n, snr_db=snr_db, chann_type=chann_type, batch_size=batch_size, n_epochs=n_epochs, lr=lr,
                                                     clipping=clipping, plot=100, stop_value=0.0001, sigma_CSI=0.0, use_feedback=False, use_robust_model=use_robust_model)
 
 save_models(encoder_perfect, decoder_perfect, prefix='perfect_', chann_type=chann_type)
 
 # Entraînement avec Feedback bruité sans correction ML
-print("\n2. Training with noisy feedback (no ML)...")
-encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder(m=16, n=7, snr_db=snr_db ,chann_type=chann_type, batch_size=batch_size, n_epochs=n_epochs, lr=lr,
+print("\n2. Training with noisy feedback (no ML) - snr_db = ", snr_db)
+encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder(m, n, snr_db=snr_db ,chann_type=chann_type, batch_size=batch_size, n_epochs=n_epochs, lr=lr,
                                                                 clipping=clipping, plot=100, stop_value=0.0001, sigma_CSI=0.5, use_feedback=True,
                                                                 snr_feedback=7, compression_level=4, delay=2, binary=False, use_ml_feedback=False, use_robust_model=use_robust_model)
 
 save_models(encoder_feedback, decoder_feedback, prefix='noisy_', chann_type=chann_type)
 
-print("\n3. Training with noisy feedback (with ML)...")
-encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder(16, 7, snr_db=snr_db, chann_type=chann_type, batch_size=batch_size, n_epochs=n_epochs, lr=lr, 
+print("\n3. Training with noisy feedback (with ML) - snr_db = ", snr_db)
+encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder(m, n, snr_db=snr_db, chann_type=chann_type, batch_size=batch_size, n_epochs=n_epochs, lr=lr, 
                                                                                        clipping=clipping, plot=100, stop_value=0.0001, sigma_CSI=0.5, use_feedback=True,
                                                                                        snr_feedback=7, compression_level=4, delay=2, binary=False, use_ml_feedback=True, use_robust_model=use_robust_model)
 
@@ -238,3 +239,8 @@ if feedback_model is not None:
 
 plt.tight_layout()
 plt.show()
+
+# Visualisation des constellations
+plot_constellation(encoder_perfect, m=m, h=None, title="Constellation sans feedback", save_path=None)
+plot_constellation(encoder_feedback, m=m, h=None, title="Constellation avec feedback (sans ML)", save_path=None)
+plot_constellation(encoder_ml, m=m, h=None, title="Constellation avec feedback (avec ML)", save_path=None)

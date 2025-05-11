@@ -6,7 +6,7 @@ import os
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
-from utils import plot_constellations, bler
+from utils import plot_constellation, bler
 from com_System import qpsk, bpsk, bpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -140,7 +140,7 @@ encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann
 encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_type=chann_type)
 
 # Paramètres d'évaluation
-snr_values = np.arange(-5, 10, 2)
+snr_values = np.arange(-5, 11, 2)
 n_samples = 10000
 
 # Stockage des résultats
@@ -191,7 +191,7 @@ plt.semilogy(snr_values, results['perfect']['ber'], 'b-o', label='CSI parfait')
 plt.semilogy(snr_values, results['noisy']['ber'], 'r--s', label='feedback bruité (sans ML)')
 plt.semilogy(snr_values, results['ml']['ber'], 'g-.d', label='feedback bruité (avec ML)')
 plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
-plt.semilogy(snr_values, ber_bpsk, 'm', label='BPSK')
+plt.semilogy(snr_values, ber_bpsk, 'm', label='BPSK + Hamming')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
 plt.title('Comparaison des performances de transmission : BER')
@@ -237,10 +237,3 @@ plt.grid(True)
 plt.legend()
 plt.show()
 
-# Visualisation des constellations
-plot_constellations(
-    results['perfect']['constellations'], 
-    results['noisy']['constellations'], 
-    results['ml']['constellations'],
-    modulation='qpsk'
-)

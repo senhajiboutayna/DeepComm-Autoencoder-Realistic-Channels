@@ -1,6 +1,8 @@
 import torch
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # To do block encoding (Hamming)
 from sk_dsp_comm import fec_block as block
@@ -124,86 +126,31 @@ def plot_training_loss(losses):
     plt.grid()
     plt.show()
 
-def plot_constellations(perfect_const, noisy_const, ml_const, modulation='qpsk', n_points=500):
-    """
-    Visualise et compare les constellations avec la constellation idéale.
-    
-    Args:
-        perfect_const: Constellation avec CSI parfait
-        noisy_const: Constellation avec feedback bruité sans ML
-        ml_const: Constellation avec feedback bruité avec ML
-        modulation: Type de modulation ('qpsk', '16qam', etc.)
-        n_points: Nombre de points à afficher
-    """
-    # Définition des constellations idéales selon le type de modulation
-    ideal_constellations = {
-        'qpsk': np.array([
-            [1/np.sqrt(2), 1/np.sqrt(2)],
-            [-1/np.sqrt(2), 1/np.sqrt(2)],
-            [-1/np.sqrt(2), -1/np.sqrt(2)],
-            [1/np.sqrt(2), -1/np.sqrt(2)]
-        ]),
-        '16qam': np.array([
-            [-3, -3], [-3, -1], [-3, 1], [-3, 3],
-            [-1, -3], [-1, -1], [-1, 1], [-1, 3],
-            [1, -3], [1, -1], [1, 1], [1, 3],
-            [3, -3], [3, -1], [3, 1], [3, 3]
-        ]) / np.sqrt(10)
-    }
-    
-    ideal_points = ideal_constellations.get(modulation.lower(), None)
-    if ideal_points is None:
-        raise ValueError(f"Modulation {modulation} non supportée. Options: 'qpsk', '16qam'")
-    
-    # Sélection aléatoire de points pour la visualisation
-    idx = np.random.choice(len(perfect_const), min(n_points, len(perfect_const)), replace=False)
-    
-    # Préparation des données
-    perfect_points = np.vstack(perfect_const)[idx]
-    noisy_points = np.vstack(noisy_const)[idx]
-    ml_points = np.vstack(ml_const)[idx]
-    
-    # Création de la figure
-    plt.figure(figsize=(18, 5))
-    
-    # 1. Constellation idéale
-    plt.subplot(1, 4, 1)
-    plt.scatter(ideal_points[:, 0], ideal_points[:, 1], color='k', marker='x', s=100, label='Points idéaux')
-    plt.title(f'Constellation Idéale ({modulation.upper()})')
-    plt.grid(True)
-    plt.axis('equal')
-    plt.xlim(-1.5, 1.5)
-    plt.ylim(-1.5, 1.5)
-    
-    # 2. CSI parfait
-    plt.subplot(1, 4, 2)
-    plt.scatter(ideal_points[:, 0], ideal_points[:, 1], color='k', marker='x', s=100, alpha=0.3)
-    plt.scatter(perfect_points[:, 0], perfect_points[:, 1], alpha=0.6, color='b')
-    plt.title('Constellation - CSI Parfait')
-    plt.grid(True)
-    plt.axis('equal')
-    plt.xlim(-1.5, 1.5)
-    plt.ylim(-1.5, 1.5)
-    
-    # 3. Feedback bruité sans ML
-    plt.subplot(1, 4, 3)
-    plt.scatter(ideal_points[:, 0], ideal_points[:, 1], color='k', marker='x', s=100, alpha=0.3)
-    plt.scatter(noisy_points[:, 0], noisy_points[:, 1], alpha=0.6, color='r')
-    plt.title('Feedback Bruité (sans ML)')
-    plt.grid(True)
-    plt.axis('equal')
-    plt.xlim(-1.5, 1.5)
-    plt.ylim(-1.5, 1.5)
-    
-    # 4. Feedback bruité avec ML
-    plt.subplot(1, 4, 4)
-    plt.scatter(ideal_points[:, 0], ideal_points[:, 1], color='k', marker='x', s=100, alpha=0.3)
-    plt.scatter(ml_points[:, 0], ml_points[:, 1], alpha=0.6, color='g')
-    plt.title('Feedback Bruité (avec ML)')
-    plt.grid(True)
-    plt.axis('equal')
-    plt.xlim(-1.5, 1.5)
-    plt.ylim(-1.5, 1.5)
-    
-    plt.tight_layout()
-    plt.show()
+
+def plot_constellation(encoder, m=16, h=None, title="Constellation", save_path=False):
+    encoder.eval()
+    with torch.no_grad():
+        inputs = torch.arange(m).long().to(device)
+        onehots = F.one_hot(inputs, num_classes=m).float()
+        if h is not None:
+            h_input = h.repeat(m, 1)
+            x_encoded = encoder(onehots, h=h_input)
+        else:
+            x_encoded = encoder(inputs)
+
+        # Représentation complexe (x = I + jQ)
+        x_complex = x_encoded.view(m, -1, 2)  # reshape par symbole
+        real = x_complex[..., 0].flatten()
+        imag = x_complex[..., 1].flatten()
+
+        plt.figure(figsize=(6,6))
+        plt.scatter(real.cpu(), imag.cpu(), c='blue')
+        for i, (x, y) in enumerate(zip(real, imag)):
+            plt.text(x.cpu()+0.02, y.cpu(), str(i), fontsize=9)
+        plt.grid(True)
+        plt.title(title)
+        plt.xlabel("In-phase")
+        plt.ylabel("Quadrature")
+        if save_path:
+            plt.savefig(f"plots/{title}.png")
+        plt.show()
