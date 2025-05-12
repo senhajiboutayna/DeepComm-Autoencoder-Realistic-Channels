@@ -80,7 +80,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
             current_sigma_CSI = sigma_CSI
             if feedback_params is not None:
                 # Génération du vrai CSI (simulé)
-                true_csi = torch.randn(encoded_data.shape, device=device)
+                _, _, _, _, true_csi, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=0.0)
 
                 # Application du feedback avec ou sans ML
                 feedback_csi_value = feedback_csi(true_csi, 
@@ -110,7 +110,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
                 predicted_message = predicted_message[:num_symbols - (num_symbols % k)]
                 message = message[:num_symbols - (num_symbols % k)]
             total_symbol_errors += np.sum(np.any(predicted_message.reshape(-1, k) != message.reshape(-1, k), axis=1))
-            total_bits += k  # Chaque message contient k bits
+            total_bits +=  k  # Chaque message contient k bits
             
             # Stockage des constellations pour visualisation
             if len(metrics['constellations']) < 1000: #Limiter le nmb stocké
@@ -135,7 +135,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 print("Chargement des modèles...")
 m, n = 16, 4
 k = int(math.log2(m))
-chann_type = 'Rician'
+chann_type = 'AWGN'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type)
@@ -199,22 +199,10 @@ plt.ylabel('BER')
 plt.title('Comparaison des performances de transmission : BER')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
-plt.savefig(f"plots/{chann_type}_BER.png")
+plt.savefig(f"plots/{chann_type}_BER_{m},{n}.png")
 plt.show()
 
-# Tracé BLER vs SNR
-plt.figure(figsize=(10, 6))
-plt.semilogy(snr_values, results['perfect']['bler'], 'b-o', label='CSI parfait')
-plt.semilogy(snr_values, results['noisy']['bler'], 'r--s', label='feedback bruité (sans ML)')
-plt.semilogy(snr_values, results['ml']['bler'], 'g-.d', label='feedback bruité (avec ML)')
-plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
-plt.xlabel('SNR (dB)')
-plt.ylabel('BLER')
-plt.title('Comparaison des performances de transmission : BLER')
-plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-plt.legend()
-plt.show()
-
+"""
 # Tracer Capacité du canal vs SNR
 plt.figure(figsize=(10,6))
 plt.plot(snr_values, results['perfect']['capacity'], 'b-o', label='CSI parfait')
@@ -238,4 +226,4 @@ plt.title('Latence de transmission en fonction du SNR')
 plt.grid(True)
 plt.legend()
 plt.show()
-
+"""

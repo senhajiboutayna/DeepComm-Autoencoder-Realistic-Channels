@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
+from math import erfc
 import matplotlib.pyplot as plt
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -155,3 +156,8 @@ def plot_constellation(encoder, m=16, h=None, title="Constellation", save_path=F
         if save_path:
             plt.savefig(f"plots/{title}.png")
         plt.show()
+
+# Générer une courbe théorique BPSK
+def theoretical_ber(snr_db):
+    snr = 10**(snr_db/10)
+    return 0.5 * erfc(np.sqrt(snr))
