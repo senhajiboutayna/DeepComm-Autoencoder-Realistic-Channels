@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print(f"Pytorch device: {device}")
@@ -34,7 +35,7 @@ class Encoder(nn.Module):
         x = self.linear_M(x)
         x = self.linear_N(x.squeeze())
         y = self.normalization(x)
-        y = y / torch.sqrt(torch.mean(y ** 2))    # Power normalization
+        y = y / torch.norm(x, dim=1, keepdim=True) * np.sqrt(self.n)    # Power normalization
         """
         Currently, BatchNorm1d is used, but in a real case, the signal must respect a power constraint.
         Idea: Force an average power of 1 with explicit normalization
@@ -45,14 +46,16 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, m, n):
+    def __init__(self, m, n, use_csi=False):
 
         super(Decoder, self).__init__()
 
         self.n = n
+        self.use_csi = use_csi
+        self.input_dim = n if not use_csi else n + 2 * n  # +2 pour (Re(h), Im(h))
 
         self.linear_relu = nn.Sequential(
-            nn.Linear(in_features=n, out_features=m),
+            nn.Linear(in_features=self.input_dim, out_features=m),
             nn.ReLU(),
         )
         
@@ -69,9 +72,13 @@ class Decoder(nn.Module):
                 torch.nn.init.normal_(m.weight)
                 torch.nn.init.zeros_(m.bias)
 
-    def forward(self, y):
+    def forward(self, y,  h=None):
 
         y = y.view(-1, self.n)  
+
+        if self.use_csi and h is not None:
+            h_realimag = torch.cat([h, torch.zeros_like(h)], dim=1)
+            y = torch.cat([y, h_realimag], dim=1)
 
         # Decoding phase
         y = self.linear_relu(y)

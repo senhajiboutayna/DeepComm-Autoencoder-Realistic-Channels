@@ -2,12 +2,15 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import math
+import io
 
 from channel import channel
 from utils import bler
 
 # To do block encoding (Hamming)
 from sk_dsp_comm import fec_block as block
+
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 def qpsk(m, n, snr_db, num_bits=10000, chann_type="AWGN"):
     """
@@ -296,4 +299,126 @@ def bpsk_communication(m, n, snr_db, n_blocks, chann_type = 'AWGN'):
 
     return block_bler
 
-bpsk_communication(16, 7, 7, 10000, chann_type = 'AWGN')
+def nn_communication(m, n, snr_db,encoder, decoder, n_blocks, chann_type):
+    
+    # Calcul du Nombre de Bits Nécessaires
+    k = math.log2(m)
+
+    # We are not training hence not using gradients. Just evaluating
+    with torch.no_grad(): 
+        """
+        Context-manager that disables gradient calculation.
+        Disabling gradient calculation is useful for inference, when you are sure that you will not call Tensor.backward(). It will reduce memory consumption for computations that would otherwise have requires_grad=True.
+        In this mode, the result of every computation will have requires_grad=False, even when the inputs have requires_grad=True. There is an exception! All factory functions, or functions that create a new Tensor and take a requires_grad kwarg, will NOT be affected by this mode.
+        """
+
+        ## Génération des Données
+
+        data = torch.randint(0, m, (n_blocks, 1)).to(device) # Génère un tenseur contenant n_blocks messages aléatoires. Chaque message est un entier compris entre 0 et m−1. 
+
+
+        ## Encodage des Données
+        encoded_data = encoder(data)
+
+        ## Transmission dans le Canal à travers un canal bruité
+        noise_data = channel(encoded_data, n, k, snr_db, chann_type=chann_type)
+
+        ## Décodage des Données
+        decoded_data = decoder(noise_data, chann_type=chann_type)
+        """
+        Les données bruitées sont décodées en probabilités par le décodeur.
+        La dernière couche du décodeur retourne une distribution de probabilités sur les m messages possibles.
+        """
+        ## Les messages décodés sont reconstruits en choisissant la classe (message) ayant la probabilité maximale.
+        dec_data = torch.argmax(decoded_data, dim=1).unsqueeze(1)   # Ici, dim=1 signifie que nous cherchons l’indice du maximum pour chaque ligne (chaque message).
+
+        ## Comptage des erreurs
+        errors = dec_data != data # Compare les messages reconstruits aux messages originaux pour identifier les erreurs.
+        total_errors = errors.sum().to("cpu").numpy() #  Nombre total de messages mal reconstruits.
+
+    ## Calcul du BLER (Block Error Rate)
+
+    bler = total_errors/n_blocks
+
+    ## Indique la fin des calculs pour le canal spécifié et le niveau de bruit.
+    print("Finished calculations for channel (%s). SNR dB: %f." % (chann_type, snr_db))
+
+    return bler
+
+
+def bpsk_communication(m, n, snr_db, n_blocks, chann_type, verbose = False):
+
+    # Calcul du Nombre de Bits Nécessaires pour représenter m messages différents
+    k = int(math.log2(m))
+
+    # Génération des Messages
+    """
+    But : Créer des messages binaires (k bits par message) qui représentent les données à transmettre.
+    Comment : Utilisation de la bibliothèque NumPy pour générer des séquences de bits aléatoires composées de 0 et 1.
+    Cela génère une matrice où chaque ligne est un message de k bits.
+    """
+    x = np.random.randint(0, 2, size=(n_blocks, k))
+    if verbose : print("Original x\n", x)
+
+    # Encodage des Messages avec Hamming
+    """
+    But : Ajouter des bits de redondance pour détecter et corriger des erreurs potentielles causées par le bruit du canal.
+    Comment : Le code de Hamming (n,k) encode chaque message de k bits en une séquence de n bits. Par exemple, pour un code (7,4), 4 bits d’information sont codés en 7 bits, avec 3 bits ajoutés pour la détection/correction d’erreurs.
+    
+    the implementation of the Hamming algorithm can be found in Python library scikit-dsp-comm. 
+    """
+    with io.capture_output() as captured :   # Supprime les messages inutiles ou parasites produits par block_encoder
+        x_encoded = block_encoder(x, n, k)  # Encode les messages x avec un code de Hamming (n,k)
+
+    if verbose : print("Encoded x\n", x_encoded)
+
+    # Modulation BPSK
+
+    """
+    But : Convertir les bits encodés (0 et 1) en signaux modulés (-1 et +1) pour transmission.
+    Comment : En BPSK, 0 est mappé à -1 et 1 est mappé à +1.
+    """
+    s_transmit = 2 * x_encoded - 1
+    if verbose : print("Transmitted signal\n", s_transmit)
+
+    # Ajout de Bruit via le Canal
+    """
+    But : Ajouter un bruit Gaussien au signal pour simuler les perturbations d'un canal réel (AWGN : Additive White Gaussian Noise).
+    Comment : Générer du bruit avec une variance dépendant de la puissance du signal et du rapport signal/bruit (Eb/N0).
+    """
+    s_noise = channel(s_transmit, n, k, snr_db, chann_type=chann_type)
+    if verbose : print("Signal with noise\n", s_noise)
+
+    # Démodulation BPSK
+    """
+    But : Récupérer les bits transmis (0 ou 1) à partir des signaux reçus (-1 ou +1).
+    Comment : Utiliser un seuil pour décider si un signal correspond à un 0 ou à un 1. Si le signal > 0 ---> 1, sinon ---> 0.
+    """
+    y = np.sign(s_noise)
+    y_enc = (y + 1) / 2
+    if verbose : print("Demodulated received signal\n", y_enc)
+
+    # Décodage avec Hamming
+
+    """
+    But : Corriger les erreurs possibles dans les bits reçus en utilisant les bits de redondance.
+    Comment : Appliquer l'algorithme de décodage de Hamming pour récupérer les k bits d'information.
+    """
+    with io.capture_output() as captured : 
+        x_rec = block_decoder(y_enc, n, k)
+
+    if verbose : print("Decoded signal\n", x_rec)
+
+    # Calcul du BLER (Block Error Rate)
+    """
+    But : Mesurer la performance du système en calculant le pourcentage de blocs de données contenant des erreurs après décodage.
+    Comment : Comparer les messages décodés aux messages originaux pour détecter les erreurs.
+    """
+
+    block_bler = bler(x, x_rec)
+    if verbose : print("Block BLER\n", block_bler)
+
+    print("Finished calculations for BPSK(%d, %d) channel: %s. SNR dB: %f." % (n, k, chann_type, snr_db))
+
+    return block_bler
+

@@ -22,6 +22,7 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
         h : Véritable coefficient du canal
         h_hat : Estimation bruitée du canal
     """
+
     snr_lin = 10**(snr_db / 10)  # Convertir SNR dB en linéaire
     n0 = 1 / snr_lin  # Variance du bruit (normalisée)
     sigma_noise = np.sqrt(n0 / 2)  # Écart-type du bruit
@@ -59,8 +60,7 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     
     # Ajout du bruit sur l'estimation du canal (CSI imparfait)
     if chann_type == "AWGN":
-        h_hat = 1 + sigma_CSI * 0.1 * torch.randn_like(h)  # Réduit l'impact du bruit
-        h_hat = torch.clamp(h_hat, min=0.5, max=1.5)
+        h_hat = 1 + sigma_CSI * torch.randn_like(h)  # Réduit l'impact du bruit
         x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
     else:
         h_hat = h + sigma_CSI * torch.abs(torch.randn_like(h))
