@@ -94,7 +94,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             assert targets.dtype == torch.long, "Targets must be LongTensor"
 
             ### Calcul de la perte avec Cross Entropy
-            loss = F.cross_entropy(decoded_data, targets)
+            loss = F.cross_entropy(decoded_data, targets, reduction='mean')
             loss.backward()
             # Vérification des NaN
             if torch.isnan(loss).any():
@@ -201,7 +201,7 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
     # Modèle pour améliorer le feedback CSI
     feedback_model = None
     if use_ml_feedback:
-        feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=128).to(device)
+        feedback_model = FeedbackCorrection(input_dim=n).to(device)
         feedback_optimizer = optim.Adam(feedback_model.parameters(), lr=lr)
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr)
@@ -219,42 +219,61 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
 
         while len(message) > 0:
             batch, targets_np = message.sample(batch_size)
-            encoder_optimizer.zero_grad()
-            decoder_optimizer.zero_grad()
-            if use_ml_feedback:
-                feedback_optimizer.zero_grad()
-
+            targets = torch.from_numpy(targets_np).to(device).type(torch.long)
             data = torch.from_numpy(batch).unsqueeze(1).to(device)
 
-            encoded_data = encoder(data)
-
-            with torch.no_grad():
-                _, _, _, _, h_true, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=sigma_CSI)
-            feedback_csi_value = feedback_csi(h_true, snr_feedback, compression_level, delay, binary, feedback_model, use_ml_feedback)
-
-            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=feedback_csi_value)
-            data_channel = torch.clamp(data_channel, -clipping, clipping)
-
-            decoded_data = decoder(data_channel, h=feedback_csi_value)
-
-            # Calcul de la perte principale
-            targets = torch.from_numpy(targets_np).to(device).type(torch.long)
-            loss = F.cross_entropy(decoded_data, targets)
-            
-            # Calcul de la perte de feedback
             if use_ml_feedback:
-                feedback_loss = F.mse_loss(feedback_csi_value, h_true)
-                total_loss = loss + 0.1 *feedback_loss
-                epoch_feedback_loss += feedback_loss.item()
-            else :
-                total_loss = loss
-
-            total_loss.backward()
-
-            encoder_optimizer.step()
-            decoder_optimizer.step()
-            if use_ml_feedback:
+                # Phase 1: Train feedback model alone
+                with torch.no_grad():
+                    encoded_data = encoder(data)
+                    _, _, _, _, h_true, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=sigma_CSI)
+                
+                feedback_optimizer.zero_grad()
+                feedback_pred = feedback_csi(h_true, snr_feedback, compression_level, delay, 
+                                        binary, feedback_model, use_ml=True)
+                feedback_loss = F.mse_loss(feedback_pred, h_true, reduction='mean')
+                feedback_loss.backward()
                 feedback_optimizer.step()
+                epoch_feedback_loss += feedback_loss.item()
+                
+                # Phase 2: Train full system
+                encoder_optimizer.zero_grad()
+                decoder_optimizer.zero_grad()
+                encoded_data = encoder(data)
+                _, _, _, _, h_true, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=sigma_CSI)
+                feedback_csi_value = feedback_csi(h_true, snr_feedback, compression_level, 
+                                            delay, binary, feedback_model, use_ml=True)
+                
+                # Channel with current feedback
+                _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, 
+                                                    sigma_CSI=feedback_csi_value)
+                data_channel = torch.clamp(data_channel, -clipping, clipping)
+                
+                decoded_data = decoder(data_channel, h=feedback_csi_value)
+                loss = F.cross_entropy(decoded_data, targets)
+                
+                # Combined loss with stronger feedback weighting
+                total_loss = loss + 0.5 * feedback_loss.detach()  # Increased feedback weight
+                total_loss.backward()
+                encoder_optimizer.step()
+                decoder_optimizer.step()
+                
+            else:
+                # Original non-ML feedback training
+                encoder_optimizer.zero_grad()
+                decoder_optimizer.zero_grad()
+                encoded_data = encoder(data)
+                _, _, _, _, h_true, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=sigma_CSI)
+                feedback_csi_value = feedback_csi(h_true, snr_feedback, compression_level, 
+                                            delay, binary, None, use_ml=False)
+                
+                _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, 
+                                                    sigma_CSI=feedback_csi_value)
+                decoded_data = decoder(data_channel, h=feedback_csi_value)
+                loss = F.cross_entropy(decoded_data, targets)
+                loss.backward()
+                encoder_optimizer.step()
+                decoder_optimizer.step()
 
             epoch_losses.append(loss.item())
             epoch_errors += count_errors(decoded_data, targets)
@@ -263,6 +282,11 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
         errors.append(epoch_errors / m)
         if use_ml_feedback:
             feedback_losses.append(epoch_feedback_loss / m)
+        
+        # Early stopping
+        if len(losses) > 20 and np.mean(losses[-20:]) < stop_value:
+            print(f"\nEarly stopping at epoch {epoch}")
+            break
 
         # Affichage de l'avancement
         if epoch % plot == 0:
@@ -277,8 +301,8 @@ chann_type = "Rayleigh"
 m, n = 16, 7
 n_epochs = 10000
 batch_size = 64
-lr = 0.0005
-snr_db = 5  
+lr = 0.0001
+snr_db = 7  
 clipping = 1e5
 
 # Entraînement classique (sans feedback)

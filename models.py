@@ -52,15 +52,17 @@ class Decoder(nn.Module):
 
         self.n = n
         self.use_csi = use_csi
-        self.input_dim = n if not use_csi else n + 2 * n  # +2 pour (Re(h), Im(h))
+        self.input_dim = n if not use_csi else n * 3  # +2 pour (Re(h), Im(h))
 
         self.linear_relu = nn.Sequential(
-            nn.Linear(in_features=self.input_dim, out_features=m),
+            nn.Linear(in_features=self.input_dim, out_features=512),
+            nn.ReLU(),
+            nn.Linear(in_features=512, out_features=256),
             nn.ReLU(),
         )
         
         self.linear_out = nn.Sequential(
-            nn.Linear(in_features=m, out_features=m),
+            nn.Linear(in_features=256, out_features=m),
             nn.LogSoftmax(dim=1),
         )
         
@@ -77,8 +79,21 @@ class Decoder(nn.Module):
         y = y.view(-1, self.n)  
 
         if self.use_csi and h is not None:
-            h_realimag = torch.cat([h, torch.zeros_like(h)], dim=1)
-            y = torch.cat([y, h_realimag], dim=1)
+            # Assurez-vous que h est 2D : (batch_size, n)
+            if h.dim() == 1:
+                h = h.unsqueeze(0)  # (n,) -> (1, n)
+            elif h.dim() == 0:
+                raise ValueError("h should be at least 1D tensor.")
+
+            if h.shape[0] == 1 and y.shape[0] > 1:
+                h = h.expand(y.shape[0], -1)
+                
+            # Normalize CSI properly
+            h_norm = h / (torch.norm(h, p=2, dim=1, keepdim=True) + 1e-6)
+            
+            # Concatenate features
+            y = torch.cat([y, h, h_norm], dim=1)
+
 
         # Decoding phase
         y = self.linear_relu(y)
@@ -88,24 +103,24 @@ class Decoder(nn.Module):
     
 
 class FeedbackCorrection(nn.Module):
-    def __init__(self, input_dim, hidden_dim=128):
+    def __init__(self, input_dim, hidden_dim=256):
         super(FeedbackCorrection, self).__init__()
-
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim//2),
             nn.ReLU(),
-        )
-
-        self.decoder = nn.Sequential(
-            nn.Linear(hidden_dim//2, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, input_dim),
-            nn.Tanh(),
+            nn.Linear(hidden_dim//2, input_dim),
+            nn.Tanh()
         )
     
     def forward(self, x):
-        encoder = self.encoder(x)
-        decoder = self.decoder(encoder)
-        return decoder
+        # Add temporal dimension if not present
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        lstm_out, _ = self.lstm(x)
+        
+        # Take last time step
+        lstm_out = lstm_out[:, -1, :]
+        y = self.fc(lstm_out)
+
+        return y
