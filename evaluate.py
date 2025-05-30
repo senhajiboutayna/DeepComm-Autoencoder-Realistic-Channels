@@ -1,20 +1,26 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
 import numpy as np
-import matplotlib.pyplot as plt
-import time
-import os
 import math
+
+import matplotlib.pyplot as plt
+from IPython.utils import io
+import os
+import time
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
-from utils import plot_constellation
-from com_System import qpsk, bpsk, bpsk_communication, nn_communication
+from utils import MemoryMessages, count_errors, plot_constellations
+from com_System import qpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 def load_models(m, n, prefix='', chann_type='AWGN', use_csi=False):
     encoder = Encoder(m=m, n=n).to(device)
-    decoder = Decoder(m=m, n=n, use_csi=use_csi).to(device)
+    decoder = Decoder(m=m, n=n).to(device)
     
     encoder.load_state_dict(torch.load(f'saved_models/{prefix}encoder_{chann_type}.pth', weights_only=True))
     decoder.load_state_dict(torch.load(f'saved_models/{prefix}decoder_{chann_type}.pth', weights_only=True))
@@ -61,7 +67,6 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     start_time = time.time()  # Mesure du temps de transmission
     total_errors = 0
-    total_blocks = 0
     total_symbol_errors = 0
     total_bits = 0
 
@@ -73,19 +78,17 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
             message_tensor = message_tensor.unsqueeze(1)
             message_tensor = message_tensor.to(device)
 
-
             # Encoder le message
-            encoded = encoder(message_tensor)
-
-            # Générer CSI réel via channel
-            _, _, _, _, h_true, _ = channel(encoded, snr_db, chann_type, sigma_CSI=0.0)
-
+            encoded_data = encoder(message_tensor)
 
             # Gestion du feedback si activé
             current_sigma_CSI = sigma_CSI
-            if feedback_params is not None:               
+            if feedback_params is not None:
+                # Génération du vrai CSI (simulé)
+                true_csi = torch.randn(encoded_data.shape, device=device)
+
                 # Application du feedback avec ou sans ML
-                feedback_csi_value = feedback_csi(h_true, 
+                feedback_csi_value = feedback_csi(true_csi, 
                                                feedback_params['snr_feedback'],
                                                feedback_params['compression_level'],
                                                feedback_params['delay'],
@@ -94,24 +97,26 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
                                                use_ml=(feedback_model is not None))
                 current_sigma_CSI = feedback_csi_value
 
-             # Appliquer le canal avec CSI estimé
-            _, data_channel, _, _, h_true_final, _ = channel(encoded, snr_db, chann_type, sigma_CSI=current_sigma_CSI)
+            # Passer le message encodé à travers le canal
+            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=current_sigma_CSI)
 
             # Décoder le message
-            if feedback_params is not None :
-                decoded_data = decoder(data_channel, h=h_true_final.to(device))
-            else :
-                decoded_data = decoder(data_channel)
+            decoded_data = decoder(data_channel)
 
             # Convertir la sortie du décodeur en prédiction
-            prediction = torch.argmax(decoded_data, dim=1).cpu().numpy()
+            predicted_message = torch.argmax(decoded_data, dim=1).cpu().numpy()
 
-            # Comptage des erreurs
-            total_errors += np.sum(prediction != message)
-            total_symbol_errors += (prediction != message).sum()
+            # Compter les erreurs
+            total_errors += np.sum(predicted_message != message)
 
-            total_bits +=  k  # Chaque message contient k bits
-            total_blocks += 1
+            # Vérifier que la taille est un multiple de k
+            num_symbols = predicted_message.shape[0]
+            if num_symbols % k != 0:
+                print(f"Avertissement: Tronquage de {num_symbols % k} éléments pour correspondre à k={k}")
+                predicted_message = predicted_message[:num_symbols - (num_symbols % k)]
+                message = message[:num_symbols - (num_symbols % k)]
+            total_symbol_errors += np.sum(np.any(predicted_message.reshape(-1, k) != message.reshape(-1, k), axis=1))
+            total_bits += k  # Chaque message contient k bits
             
             # Stockage des constellations pour visualisation
             if len(metrics['constellations']) < 1000: #Limiter le nmb stocké
@@ -123,7 +128,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     # Calculer le BER et SER
     metrics['ber'] = total_errors / total_bits
-    metrics['ser'] = total_symbol_errors / total_blocks
+    metrics['ser'] = total_symbol_errors / n_samples
 
     # Capacité du canal (Shannon)
     snr_linear = 10 ** (snr_db / 10)
@@ -131,28 +136,22 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     return metrics
 
-# Charger les modèles sauvegardés
-print("Chargement des modèles...")
-m, n = 16, 7 
-k = int(math.log2(m))
+snr_values = np.arange(-5, 10, 2)  # SNR en dB
+n_samples = 20000  # Nombre d'échantillons pour l'évaluation
+m, n, k = 16, 7, 4  # Paramètres de l'autoencodeur
 chann_type = 'Rayleigh'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type, use_csi=False)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type, use_csi=True)
 encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_type=chann_type, use_csi=True)
 
-# Paramètres d'évaluation
-snr_values = np.arange(-5, 10, 2)
-n_samples = 200
-
 # Stockage des résultats
 results = {
     'perfect': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []},
     'noisy': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []},
-    'ml': {'ber': [],  'ser': [], 'capacity': [], 'latency': [], 'constellations': []}
-}
+    'ml': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []}
+    }
 ber_qpsk = []
-ber_bpsk = []
 
 # Boucle sur chaque SNR
 for snr in snr_values:
@@ -160,34 +159,29 @@ for snr in snr_values:
 
     # CSI parfait 
     print(" - Perfect CSI")
-    metrics = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
+    metrics = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
     for key in results['perfect']:
         results['perfect'][key].append(metrics[key])
 
     # Autoencodeur AVEC feedback bruité sans correction ML
     print(" - Noisy feedback (no ML)")
     feedback_params = {
-        'snr_feedback': 10, 
-        'compression_level': 2, 
-        'delay': 1
+        'snr_feedback': 7, 
+        'compression_level': 4, 
+        'delay': 2
     }
-    metrics = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params)
+    metrics = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params)
     for key in results['noisy']:
         results['noisy'][key].append(metrics[key])
 
     # Autoencodeur AVEC feedback bruité avec correction ML
     print(" - Noisy feedback (with ML)")
-    metrics = evaluate_autoencoder(encoder_ml, decoder_ml, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params, feedback_model=feedback_model)
+    metrics = evaluate_autoencoder(encoder_ml, decoder_ml, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params, feedback_model=feedback_model)
     for key in results['ml']:
         results['ml'][key].append(metrics[key])
     
     # QPSK
-    print(" - QPSK")
-    ber_qpsk.append(qpsk(m, n, snr_db=snr, num_bits=n_samples, chann_type=chann_type))
-
-    # BPSK
-    #ber_bpsk.append(bpsk(snr_db=snr, num_bits=n_samples, chann_type=chann_type))
-
+    ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type="Rayleigh"))
 
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
@@ -200,31 +194,5 @@ plt.ylabel('BER')
 plt.title('Comparaison des performances de transmission : BER')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
-plt.savefig(f"plots/{chann_type}_BER_{m},{n}.png")
+plt.savefig(f"plots/{chann_type}_BER.png")
 plt.show()
-
-"""
-# Tracer Capacité du canal vs SNR
-plt.figure(figsize=(10,6))
-plt.plot(snr_values, results['perfect']['capacity'], 'b-o', label='CSI parfait')
-plt.plot(snr_values, results['noisy']['capacity'], 'r--s', label='feedback bruité (sans ML)')
-plt.plot(snr_values, results['ml']['capacity'], 'g-.d', label='feedback bruité (avec ML)')
-plt.xlabel('SNR (dB)')
-plt.ylabel('Capacité (bits/s/Hz)')
-plt.title('Capacité théorique du canal en fonction du SNR')
-plt.grid(True)
-plt.legend()
-plt.show()
-
-# Tracer Latence de transmission vs SNR
-plt.figure(figsize=(10,6))
-plt.plot(snr_values, np.array(results['perfect']['latency'])*1000, 'b-o', label='CSI parfait')
-plt.plot(snr_values, np.array(results['noisy']['latency'])*1000, 'r--s', label='feedback bruité (sans ML)')
-plt.plot(snr_values, np.array(results['ml']['latency'])*1000, 'g-.d', label='feedback bruité (avec ML)')
-plt.xlabel('SNR (dB)')
-plt.ylabel('Latence (ms)')
-plt.title('Latence de transmission en fonction du SNR')
-plt.grid(True)
-plt.legend()
-plt.show()
-"""

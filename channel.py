@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm, rayleigh, rice
 
-def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0,  h_override=None):
+def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     """
     Simule un canal de communication avec AWGN, Rayleigh ou Rician fading.
     Simule un canal de communication avec CSI parfait ou bruité.
@@ -22,7 +22,6 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0,  h_override
         h : Véritable coefficient du canal
         h_hat : Estimation bruitée du canal
     """
-
     snr_lin = 10**(snr_db / 10)  # Convertir SNR dB en linéaire
     n0 = 1 / snr_lin  # Variance du bruit (normalisée)
     sigma_noise = np.sqrt(n0 / 2)  # Écart-type du bruit
@@ -31,14 +30,14 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0,  h_override
         h = torch.ones_like(x)  # Canal AWGN = pas d'effet de fading, donc h = 1
         noise = sigma_noise * torch.randn_like(x)  # Bruit Gaussien
         x_channel = h * x + noise
-        #print(f"Mean of noise - AWGN: {torch.mean(noise)}, Std of noise - AWGN: {torch.std(noise)}")
+        print(f"Mean of noise - AWGN: {torch.mean(noise)}, Std of noise - AWGN: {torch.std(noise)}")
 
     elif chann_type == "Rayleigh":
         # Fading Rayleigh (module d'un signal complexe gaussien)
         h = torch.sqrt(torch.randn_like(x) ** 2 + torch.randn_like(x) ** 2) / np.sqrt(2)
         noise = sigma_noise * torch.randn_like(x)
         x_channel = h * x + noise  # Application du fading
-        #print(f"Mean x_channel - Rayleigh: {torch.mean(x_channel)}, Std x_channel - Rayleigh: {torch.std(x_channel)}")
+        print(f"Mean x_channel - Rayleigh: {torch.mean(x_channel)}, Std x_channel - Rayleigh: {torch.std(x_channel)}")
 
     elif chann_type == "Rician":
         # Fading Rician = Composante directe + diffusion (Rayleigh)
@@ -53,22 +52,19 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0,  h_override
     
         noise = sigma_noise * torch.randn_like(x)   # Bruit Gaussien
         x_channel = h * x + noise   # Application du fading
-        #print(f"Mean x_channel - Rician: {torch.mean(x_channel)}, Std x_channel - Rician: {torch.std(x_channel)}")
+        print(f"Mean x_channel - Rician: {torch.mean(x_channel)}, Std x_channel - Rician: {torch.std(x_channel)}")
 
     else:
         raise ValueError(f"Type de canal non supporté: {chann_type}")
     
     # Ajout du bruit sur l'estimation du canal (CSI imparfait)
-    if h_override is not None:
-        h_hat = h_override  # Feedback CSI fourni (corrigé ou pas)
-        x_channel_CSI = h_hat * x + noise
+    if chann_type == "AWGN":
+        h_hat = 1 + sigma_CSI * 0.1 * torch.randn_like(h)  # Réduit l'impact du bruit
+        h_hat = torch.clamp(h_hat, min=0.5, max=1.5)  # Garde une variation plus réaliste
+        x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
     else:
-        if chann_type == "AWGN":
-            h_hat = 1 + sigma_CSI * torch.randn_like(h)  # Réduit l'impact du bruit
-            x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
-        else:
-            h_hat = h + sigma_CSI * torch.abs(torch.randn_like(h))
-            x_channel_CSI = h_hat * x + noise
+        h_hat = torch.clamp(h + sigma_CSI * torch.abs(torch.randn_like(h)), min=0.1)
+        x_channel_CSI = h_hat * x + noise
 
     # Égalisation avec CSI parfait
     x_received = x_channel / h  
@@ -110,7 +106,7 @@ def plot_channel_distribution(snr_db=10, n_samples=10000, chann_type="AWGN", K_r
     plt.title(f"Distribution du signal après le canal {chann_type}")
     plt.legend()
     plt.grid()
-    plt.show()
+    #plt.show()
 
 
 def plot_fading_distributions():
@@ -137,7 +133,7 @@ def plot_fading_distributions():
     plt.title("Distributions Rayleigh et Rician")
     plt.legend()
     plt.grid()
-    plt.show()
+    #plt.show()
 
 def evaluate_CSI_impact():
     """
@@ -166,7 +162,7 @@ def evaluate_CSI_impact():
         plt.title(f"Distribution de h et h_hat ({chann_type}, SNR={snr} dB)")
         plt.legend()
         plt.grid()
-        plt.show()
+        #plt.show()
 
         # Affichage de la distribution du signal après le CSI
         plot_channel_distribution_CSI(x, snr, chann_type, K_rician=3, sigma_CSI=1.0)
@@ -205,7 +201,8 @@ def plot_channel_distribution_CSI(x, snr_db, chann_type="AWGN", K_rician=3, sigm
     plt.title(f"Distribution du signal après le canal {chann_type} (CSI bruité)")
     plt.legend()
     plt.grid()
-    plt.show()
+    #plt.show()
+
 
 
 """
@@ -219,6 +216,13 @@ plot_fading_distributions()
 
 #Test avec un CSI bruité
 evaluate_CSI_impact()
+
+# Affichage de la distribution du signal apres le CSI
+plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="AWGN", K_rician=3, sigma_CSI=1.0)
+plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="Rayleigh", K_rician=3, sigma_CSI=1.0)
+plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="Rician", K_rician=3, sigma_CSI=1.0)
+
+plt.show()
 """
 
 def feedback_csi(true_csi, snr_feedback, compression_level, delay=0, binary=False, feedback_model=None, use_ml=True):

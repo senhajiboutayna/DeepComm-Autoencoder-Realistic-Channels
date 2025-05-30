@@ -17,7 +17,6 @@ Instead of assuming ideal AWGN channels, we integrate **fading models** (Rayleig
 │── 📄 requirements.txt # Dependencies
 │── 📄 channel.py # Simulates channels
 │── 📄 com_System.py # Simulates an QPSK communication system
-│── 📄 debug_test.py # Debugging and testing script
 │── 📄 evaluate.py # Model evaluation and performance analysis
 │── 📄 models.py # Neural network architectures 
 │── 📄 modulation.py # Modulation constraints and utilities
