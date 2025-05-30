@@ -404,7 +404,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     return metrics
 
-chann_type = "Rayleigh"
+chann_type = "AWGN"
 n_epochs = 20000
 
 # Entraînement classique (sans feedback)
@@ -440,7 +440,8 @@ plt.ylabel("BER")
 plt.title("Impact du Feedback Bruité sur l'Autoencodeur")
 plt.legend()
 plt.grid()
-plt.show()
+plt.savefig(f"plots/{chann_type}_BER_epochs.png")
+
 
 if feedback_model is not None:
         plt.figure(figsize=(10, 6))
@@ -450,5 +451,7 @@ if feedback_model is not None:
         plt.title("Évolution de la perte du modèle de feedback")
         plt.legend()
         plt.grid()
-        plt.show()
+        plt.savefig(f"plots/{chann_type}_loss.png")
 
+plt.tight_layout()
+plt.show()
