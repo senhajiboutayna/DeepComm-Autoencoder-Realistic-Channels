@@ -143,7 +143,7 @@ encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_t
 
 # Paramètres d'évaluation
 snr_values = np.arange(-5, 10, 2)
-n_samples = 2000
+n_samples = 200
 
 # Stockage des résultats
 results = {
@@ -182,6 +182,7 @@ for snr in snr_values:
         results['ml'][key].append(metrics[key])
     
     # QPSK
+    print(" - QPSK")
     ber_qpsk.append(qpsk(m, n, snr_db=snr, num_bits=n_samples, chann_type=chann_type))
 
     # BPSK

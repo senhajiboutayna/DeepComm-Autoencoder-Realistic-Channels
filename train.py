@@ -169,7 +169,7 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
 
     return encoder, decoder, errors
 
-def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_level, delay, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, sigma_CSI=0.5, binary=False, use_ml_feedback=True):
+def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_level, delay, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, sigma_CSI=None, binary=False, use_ml_feedback=True):
     """
     Entraîne l'autoencodeur en utilisant un feedback CSI bruité et compressé.
 
@@ -240,13 +240,12 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
                 encoder_optimizer.zero_grad()
                 decoder_optimizer.zero_grad()
                 encoded_data = encoder(data)
-                _, _, _, _, h_true, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=sigma_CSI)
                 feedback_csi_value = feedback_csi(h_true, snr_feedback, compression_level, 
                                             delay, binary, feedback_model, use_ml=True)
                 
                 # Channel with current feedback
                 _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, 
-                                                    sigma_CSI=feedback_csi_value)
+                                                    h_override=feedback_csi_value)
                 data_channel = torch.clamp(data_channel, -clipping, clipping)
                 
                 decoded_data = decoder(data_channel, h=feedback_csi_value)

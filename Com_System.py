@@ -3,8 +3,10 @@ import torch
 import matplotlib.pyplot as plt
 import math
 import io
+import os
 
-from channel import channel
+from channel import channel, feedback_csi
+from models import FeedbackCorrection
 from utils import bler
 
 # To do block encoding (Hamming)
@@ -12,23 +14,32 @@ from sk_dsp_comm import fec_block as block
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-def qpsk(m, n, snr_db, num_bits=10000, chann_type="AWGN"):
+def qpsk(m, n, snr_db, num_bits=10000, chann_type="AWGN", feedback_snr=10, use_ml = True):
     """
-    Simule une transmission QPSK et calcule le taux d'erreur binaire (BER).
-
-    Paramètres :
-        snr_db (float) : SNR en dB.
-        num_bits (int) : Nombre de bits à transmettre (doit être pair).
-        chann_type (str) : Type de canal ("AWGN", "Rayleigh", "Rician").
-
-    Retourne :
-        ber (float) : Taux d'erreur binaire.
+    Enhanced QPSK simulation with improved feedback handling for Rayleigh channels
+    
+    Parameters:
+        snr_db (float): SNR in dB for main channel
+        num_bits (int): Number of bits to transmit (must be even)
+        chann_type (str): Channel type ("AWGN", "Rayleigh", "Rician")
+        feedback_snr (float): SNR for feedback channel in dB
+        use_ml_feedback (bool): Whether to use ML-enhanced feedback correction
+        
+    Returns:
+        ber (float): Bit error rate
     """
+    # Initialize feedback model if using ML
+    feedback_model = None
+    if use_ml:
+        feedback_model = FeedbackCorrection(input_dim=2, hidden_dim=128).to(device)
+        # Load pre-trained weights if available
+        if os.path.exists('saved_models/ml_feedback_{chann_type}.pth'):
+            feedback_model.load_state_dict(torch.load('saved_models/ml_feedback_{chann_type}.pth'))
 
-    # Calcul du Nombre de Bits Nécessaires pour représenter m messages différents
+    # Calculate number of bits needed
     k = int(math.log2(m))
     
-    # Assurer que le nombre de bits est pair (chaque symbole QPSK = 2 bits)
+    # Ensure even number of bits
     if num_bits % 2 != 0:
         num_bits += 1
 
@@ -41,15 +52,28 @@ def qpsk(m, n, snr_db, num_bits=10000, chann_type="AWGN"):
     symbols /= np.sqrt(2)  # Normalisation de la puissance
     symbols = torch.tensor(symbols, dtype=torch.cfloat)
 
+    # Génération de symboles QPSK aléatoires (constellation +_1 +_j)
+    symbols = (2 * np.random.randint(0, 2, num_bits) - 1) + 1j * (2 * np.random.randint(0, 2, num_bits) - 1)
+    symbols /= np.sqrt(2)  # Normalisation pour une puissance moyenne de 1
+
     # Appliquer les effets du canal
-    if chann_type == "AWGN":
-        _, _, received_symbols, _, _, _ = channel(symbols, snr_db, chann_type="AWGN")
-
-    elif chann_type == "Rayleigh":
-        _, _, received_symbols, _, _, _ = channel(symbols, snr_db, chann_type="Rayleigh")
-
-    elif chann_type == "Rician":
-        _, _, received_symbols, _, _, _ = channel(symbols, snr_db, chann_type="Rician")
+    if chann_type in ["AWGN", "Rayleigh", "Rician"]:
+        # Get channel state information with noise
+        x_channel, x_channel_csi, _, _, h_true, h_hat = channel(
+            symbols, snr_db, chann_type, sigma_CSI=0.1)
+        
+        # Simulate feedback loop with temporal correlation
+        feedback = feedback_csi(
+            h_hat,
+            snr_feedback=feedback_snr,
+            compression_level=4,
+            feedback_model=feedback_model,
+            use_ml=use_ml,
+        )
+        
+        # Enhanced equalization blending feedback and direct estimates
+        equalized = x_channel / (0.7*feedback + 0.3*h_hat)
+        received_symbols = equalized
 
     else:
         raise ValueError(f"Type de canal non supporté: {chann_type}")

@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm, rayleigh, rice
 
-def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
+def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0,  h_override=None):
     """
     Simule un canal de communication avec AWGN, Rayleigh ou Rician fading.
     Simule un canal de communication avec CSI parfait ou bruité.
@@ -59,12 +59,16 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
         raise ValueError(f"Type de canal non supporté: {chann_type}")
     
     # Ajout du bruit sur l'estimation du canal (CSI imparfait)
-    if chann_type == "AWGN":
-        h_hat = 1 + sigma_CSI * torch.randn_like(h)  # Réduit l'impact du bruit
-        x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
-    else:
-        h_hat = h + sigma_CSI * torch.abs(torch.randn_like(h))
+    if h_override is not None:
+        h_hat = h_override  # Feedback CSI fourni (corrigé ou pas)
         x_channel_CSI = h_hat * x + noise
+    else:
+        if chann_type == "AWGN":
+            h_hat = 1 + sigma_CSI * torch.randn_like(h)  # Réduit l'impact du bruit
+            x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
+        else:
+            h_hat = h + sigma_CSI * torch.abs(torch.randn_like(h))
+            x_channel_CSI = h_hat * x + noise
 
     # Égalisation avec CSI parfait
     x_received = x_channel / h  
