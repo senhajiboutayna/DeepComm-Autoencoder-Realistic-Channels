@@ -159,7 +159,7 @@ for snr in snr_values:
 
     # CSI parfait 
     print(" - Perfect CSI")
-    metrics = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
+    metrics = evaluate_autoencoder(encoder_perfect, decoder_perfect, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.0, feedback_params=None)
     for key in results['perfect']:
         results['perfect'][key].append(metrics[key])
 
@@ -170,18 +170,18 @@ for snr in snr_values:
         'compression_level': 4, 
         'delay': 2
     }
-    metrics = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params)
+    metrics = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params)
     for key in results['noisy']:
         results['noisy'][key].append(metrics[key])
 
     # Autoencodeur AVEC feedback bruité avec correction ML
     print(" - Noisy feedback (with ML)")
-    metrics = evaluate_autoencoder(encoder_ml, decoder_ml, m, n, k, snr, chann_type="Rayleigh", n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params, feedback_model=feedback_model)
+    metrics = evaluate_autoencoder(encoder_ml, decoder_ml, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params, feedback_model=feedback_model)
     for key in results['ml']:
         results['ml'][key].append(metrics[key])
     
     # QPSK
-    ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type="Rayleigh"))
+    ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type=chann_type))
 
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
@@ -191,7 +191,7 @@ plt.semilogy(snr_values, results['ml']['ber'], 'g-.d', label='feedback bruité (
 plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
-plt.title('Comparaison des performances de transmission : BER')
+plt.title('Comparaison des performances de transmission : BER pour un canal ' + chann_type)
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
 plt.savefig(f"plots/{chann_type}_BER.png")
