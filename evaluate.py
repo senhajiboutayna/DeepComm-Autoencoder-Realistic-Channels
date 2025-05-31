@@ -112,7 +112,6 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
             # Vérifier que la taille est un multiple de k
             num_symbols = predicted_message.shape[0]
             if num_symbols % k != 0:
-                print(f"Avertissement: Tronquage de {num_symbols % k} éléments pour correspondre à k={k}")
                 predicted_message = predicted_message[:num_symbols - (num_symbols % k)]
                 message = message[:num_symbols - (num_symbols % k)]
             total_symbol_errors += np.sum(np.any(predicted_message.reshape(-1, k) != message.reshape(-1, k), axis=1))
@@ -137,10 +136,10 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
     return metrics
 
 snr_values = np.arange(-2, 11, 2)  # SNR en dB
-n_samples = 20000  # Nombre d'échantillons pour l'évaluation
+n_samples = 30000  # Nombre d'échantillons pour l'évaluation
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = int(math.log2(m))
-chann_type = 'Rayleigh'
+chann_type = 'AWGN'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type, use_csi=False)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type, use_csi=True)
@@ -186,13 +185,13 @@ for snr in snr_values:
 
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
-plt.semilogy(snr_values, results['perfect']['ber'], 'b-o', label='CSI parfait')
-plt.semilogy(snr_values, results['ml']['ber'], 'r--s', label='feedback bruité (sans ML)')
-plt.semilogy(snr_values, results['noisy']['ber'], 'g-.d', label='feedback bruité (avec ML)')
+plt.semilogy(snr_values, results['perfect']['ber'], 'b-o', label='Perfect CSI')
+plt.semilogy(snr_values, results['ml']['ber'], 'r--s', label='Noisy feedback (no corrected)')
+plt.semilogy(snr_values, results['noisy']['ber'], 'g-.d', label='Noisy feedback (with ML correction)')
 plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
-plt.title('Comparaison des performances de transmission : BER pour un canal ' + chann_type)
+plt.title('Comparison of transmission performance: BER for one channel ' + chann_type + ' channel')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
 plt.savefig(f"plots/{chann_type}_BER.png")

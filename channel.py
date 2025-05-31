@@ -100,7 +100,7 @@ def plot_channel_distribution(snr_db=10, n_samples=10000, chann_type="AWGN", K_r
 
     plt.xlabel("Amplitude")
     plt.ylabel("Density")
-    plt.title(f"Signal distribution after the channel {chann_type}")
+    plt.title(f"Signal distribution after passing through {chann_type}")
     plt.legend()
     plt.grid()
     plt.savefig(f"plots/{chann_type}_distribution.png")
@@ -195,9 +195,9 @@ def plot_channel_distribution_CSI(x, snr_db, chann_type="AWGN", K_rician=3, sigm
         plt.plot(x_range, rice.pdf(x_range, b, scale=sigma), 'r-', label="Theoretical")
 
 
-    plt.xlabel("Valeur du signal")
-    plt.ylabel("Densité")
-    plt.title(f"Distribution du signal après le canal {chann_type} (CSI bruité)")
+    plt.xlabel("Amplitude")
+    plt.ylabel("Density")
+    plt.title(f"Signal distribution after passing through {chann_type} (Noisy CSI)")
     plt.legend()
     plt.grid()
     plt.savefig(f"plots/{chann_type}_distribution_CSI.png")
@@ -205,7 +205,7 @@ def plot_channel_distribution_CSI(x, snr_db, chann_type="AWGN", K_rician=3, sigm
 
 
 
-"""
+
 # Affichage des distributions simulées et théoriques
 plot_channel_distribution(snr_db=10, chann_type="AWGN")
 plot_channel_distribution(snr_db=10, chann_type="Rayleigh")
@@ -223,7 +223,7 @@ plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="Raylei
 plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="Rician", K_rician=3, sigma_CSI=1.0)
 
 plt.show()
-"""
+
 
 def feedback_csi(true_csi, snr_feedback, compression_level, delay=0, binary=False, feedback_model=None, use_ml=True):
     """
