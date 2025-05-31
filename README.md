@@ -45,3 +45,6 @@ pip install -r requirements.txt
 ```bash
 python train.py
 ```
+```bash
+python evaluate.py
+```
