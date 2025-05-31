@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm, rayleigh, rice
 
-def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
+def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0, plot=False):
     """
     Simule un canal de communication avec AWGN, Rayleigh ou Rician fading.
     Simule un canal de communication avec CSI parfait ou bruité.
@@ -36,6 +36,26 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
         h = torch.sqrt(torch.randn_like(x) ** 2 + torch.randn_like(x) ** 2) / np.sqrt(2)
         noise = sigma_noise * torch.randn_like(x)
         x_channel = h * x + noise  # Application du fading
+
+        # Plot histogram of |h|² if requested
+        if plot:
+            plt.figure(figsize=(10, 5))
+            h_np = h.numpy()
+            h_squared = np.abs(h_np)**2
+            
+            # Plot histogram
+            plt.hist(h_squared, bins=50, density=True, alpha=0.6, label="Simulated |h|²")
+            
+            # Plot theoretical exponential PDF
+            x = np.linspace(0, 5, 100)
+            plt.plot(x, np.exp(-x), 'r-', label="Theoretical exp(-x)")
+            
+            plt.title('Distribution of |h|² for Rayleigh Fading Channel')
+            plt.xlabel('|h|²')
+            plt.ylabel('Probability Density')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('plots/h_squared_rayleigh.png')
 
     elif chann_type == "Rician":
         # Fading Rician = Composante directe + diffusion (Rayleigh)
@@ -205,7 +225,7 @@ def plot_channel_distribution_CSI(x, snr_db, chann_type="AWGN", K_rician=3, sigm
 
 
 
-
+"""
 # Affichage des distributions simulées et théoriques
 plot_channel_distribution(snr_db=10, chann_type="AWGN")
 plot_channel_distribution(snr_db=10, chann_type="Rayleigh")
@@ -223,6 +243,7 @@ plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="Raylei
 plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="Rician", K_rician=3, sigma_CSI=1.0)
 
 plt.show()
+"""
 
 
 def feedback_csi(true_csi, snr_feedback, compression_level, delay=0, binary=False, feedback_model=None, use_ml=True):

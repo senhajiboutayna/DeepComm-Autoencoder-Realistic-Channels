@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
+def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN", plot_constellation=False):
     # Assurer que le nombre de bits est pair
     if num_bits % 2 != 0:
         num_bits += 1
@@ -19,15 +19,25 @@ def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
     noise_power = 1 / (2 * snr_linear)  # Variance du bruit (correcte pour QPSK)
     noise = np.sqrt(noise_power) * (np.random.randn(len(symbols)) + 1j * np.random.randn(len(symbols)))
 
+    # Variables pour stocker les constellations
+    received_no_eq = None
+    received_with_eq = None
+
     # Appliquer les effets du canal
     if channel_type == "AWGN":
-        received_symbols = symbols + noise
+        # Version sans égalisation
+        received_no_eq = h * symbols + noise
+        # Version avec égalisation MMSE
+        received_with_eq = received_no_eq * np.conj(h) / (np.abs(h)**2 + noise_power)
+        received_symbols = received_with_eq  # On utilise la version avec égalisation pour le BER
 
     elif channel_type == "Rayleigh":
         h = (np.random.randn(len(symbols)) + 1j * np.random.randn(len(symbols))) / np.sqrt(2)
-        received_symbols = h * symbols + noise
-        # Égalisation MMSE (meilleure que ZF pour les faibles SNR)
-        received_symbols = received_symbols * np.conj(h) / (np.abs(h)**2 + noise_power)
+        # Version sans égalisation
+        received_no_eq = h * symbols + noise
+        # Version avec égalisation MMSE
+        received_with_eq = received_no_eq * np.conj(h) / (np.abs(h)**2 + noise_power)
+        received_symbols = received_with_eq  # On utilise la version avec égalisation pour le BER
 
     elif channel_type == "Rician":
         K = 3  # Facteur K du canal Rician
@@ -50,9 +60,37 @@ def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
     # Calcul du BER
     errors = np.sum(bits != detected_bits)
     ber = errors / num_bits
+
+    # Visualisation des constellations si demandé et canal Rayleigh
+    if plot_constellation and channel_type == "Rayleigh":
+        plt.figure(figsize=(10, 6))
+        
+        # Constellation reçue sans égalisation
+        plt.subplot(1, 2, 1)
+        plt.scatter(np.real(received_no_eq), np.imag(received_no_eq), alpha=0.5)
+        plt.scatter(np.real(symbols), np.imag(symbols), alpha=0.5, c='r')
+        plt.title(f'QPSK with Rayleigh Fading')
+        plt.xlabel('In-phase')
+        plt.ylabel('Quadrature')
+        plt.grid(True)
+        plt.axis('equal')
+        plt.xlim(-3, 3); plt.ylim(-3, 3)
+        
+        # Constellation reçue avec égalisation
+        plt.subplot(1, 2, 2)
+        plt.scatter(np.real(received_with_eq), np.imag(received_with_eq), alpha=0.5)
+        plt.scatter(np.real(symbols), np.imag(symbols), alpha=0.5, c='r')
+        plt.title(f'QPSK after MMSE Equalization')
+        plt.xlabel('In-phase')
+        plt.ylabel('Quadrature')
+        plt.grid(True)
+        plt.axis('equal')
+        plt.xlim(-1.5, 1.5); plt.ylim(-1.5, 1.5)
+        
+        plt.tight_layout()
+        plt.savefig("plots/Rayleigh_Constellations.png")
+
     return ber 
-
-
 
 def bpsk_communication(snr_db, num_bits=10000, channel_type="AWGN"):
     """

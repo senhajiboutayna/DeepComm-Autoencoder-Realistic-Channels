@@ -139,7 +139,7 @@ snr_values = np.arange(-2, 11, 2)  # SNR en dB
 n_samples = 30000  # Nombre d'échantillons pour l'évaluation
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = int(math.log2(m))
-chann_type = 'AWGN'
+chann_type = 'Rayleigh'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type, use_csi=False)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type, use_csi=True)
@@ -166,9 +166,9 @@ for snr in snr_values:
     # Autoencodeur AVEC feedback bruité sans correction ML
     print(" - Noisy feedback (no ML)")
     feedback_params = {
-        'snr_feedback': 7, 
-        'compression_level': 4, 
-        'delay': 2
+        'snr_feedback': 10, 
+        'compression_level': 2, 
+        'delay': 1
     }
     metrics = evaluate_autoencoder(encoder_feedback, decoder_feedback, m, n, k, snr, chann_type=chann_type, n_samples=n_samples, sigma_CSI=0.5, feedback_params=feedback_params)
     for key in results['noisy']:
