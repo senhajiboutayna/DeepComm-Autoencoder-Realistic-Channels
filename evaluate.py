@@ -136,7 +136,7 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     return metrics
 
-snr_values = np.arange(-5, 10, 2)  # SNR en dB
+snr_values = np.arange(-2, 11, 2)  # SNR en dB
 n_samples = 20000  # Nombre d'échantillons pour l'évaluation
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = int(math.log2(m))
@@ -187,8 +187,8 @@ for snr in snr_values:
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
 plt.semilogy(snr_values, results['perfect']['ber'], 'b-o', label='CSI parfait')
-plt.semilogy(snr_values, results['noisy']['ber'], 'r--s', label='feedback bruité (sans ML)')
-plt.semilogy(snr_values, results['ml']['ber'], 'g-.d', label='feedback bruité (avec ML)')
+plt.semilogy(snr_values, results['ml']['ber'], 'r--s', label='feedback bruité (sans ML)')
+plt.semilogy(snr_values, results['noisy']['ber'], 'g-.d', label='feedback bruité (avec ML)')
 plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')

@@ -30,14 +30,12 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
         h = torch.ones_like(x)  # Canal AWGN = pas d'effet de fading, donc h = 1
         noise = sigma_noise * torch.randn_like(x)  # Bruit Gaussien
         x_channel = h * x + noise
-        print(f"Mean of noise - AWGN: {torch.mean(noise)}, Std of noise - AWGN: {torch.std(noise)}")
 
     elif chann_type == "Rayleigh":
         # Fading Rayleigh (module d'un signal complexe gaussien)
         h = torch.sqrt(torch.randn_like(x) ** 2 + torch.randn_like(x) ** 2) / np.sqrt(2)
         noise = sigma_noise * torch.randn_like(x)
         x_channel = h * x + noise  # Application du fading
-        print(f"Mean x_channel - Rayleigh: {torch.mean(x_channel)}, Std x_channel - Rayleigh: {torch.std(x_channel)}")
 
     elif chann_type == "Rician":
         # Fading Rician = Composante directe + diffusion (Rayleigh)
@@ -52,7 +50,6 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0):
     
         noise = sigma_noise * torch.randn_like(x)   # Bruit Gaussien
         x_channel = h * x + noise   # Application du fading
-        print(f"Mean x_channel - Rician: {torch.mean(x_channel)}, Std x_channel - Rician: {torch.std(x_channel)}")
 
     else:
         raise ValueError(f"Type de canal non supporté: {chann_type}")
@@ -101,11 +98,12 @@ def plot_channel_distribution(snr_db=10, n_samples=10000, chann_type="AWGN", K_r
         sigma = 1 / np.sqrt(6)  # Échelle correcte 
         plt.plot(x_range, rice.pdf(x_range, b, scale=sigma), 'r-', label="Theoretical")
 
-    plt.xlabel("Valeur du signal")
-    plt.ylabel("Densité")
-    plt.title(f"Distribution du signal après le canal {chann_type}")
+    plt.xlabel("Amplitude")
+    plt.ylabel("Density")
+    plt.title(f"Signal distribution after the channel {chann_type}")
     plt.legend()
     plt.grid()
+    plt.savefig(f"plots/{chann_type}_distribution.png")
     #plt.show()
 
 
@@ -128,9 +126,9 @@ def plot_fading_distributions():
 
         plt.plot(x_range, pdf, label=label)
 
-    plt.xlabel("Valeur du signal")
-    plt.ylabel("Densité")
-    plt.title("Distributions Rayleigh et Rician")
+    plt.xlabel("Amplitude")
+    plt.ylabel("Density")
+    plt.title("Rayleigh et Rician Distributions")
     plt.legend()
     plt.grid()
     #plt.show()
@@ -154,14 +152,15 @@ def evaluate_CSI_impact():
 
         for sigma_CSI in sigma_CSI_values:
             _, _, _, _, h, h_hat = channel(x, snr, chann_type, K_rician=3, sigma_CSI=sigma_CSI)
-            plt.hist(h_hat.numpy(), bins=50, density=True, alpha=0.5, label=f"CSI bruité (σ={sigma_CSI})")
+            plt.hist(h_hat.numpy(), bins=50, density=True, alpha=0.5, label=f"Noisy CSI (σ={sigma_CSI})")
 
-        plt.hist(h.numpy(), bins=50, density=True, alpha=0.5, label="h (vrai canal)")
-        plt.xlabel("Valeur du coefficient de canal")
-        plt.ylabel("Densité")
-        plt.title(f"Distribution de h et h_hat ({chann_type}, SNR={snr} dB)")
+        plt.hist(h.numpy(), bins=50, density=True, alpha=0.5, label="h (True channel)")
+        plt.xlabel("Channel Coefficient h")
+        plt.ylabel("Density")
+        plt.title(f"Distribution of h ({chann_type}, SNR={snr} dB)")
         plt.legend()
         plt.grid()
+        plt.savefig(f"plots/{chann_type}_h_CSI.png")
         #plt.show()
 
         # Affichage de la distribution du signal après le CSI
@@ -201,6 +200,7 @@ def plot_channel_distribution_CSI(x, snr_db, chann_type="AWGN", K_rician=3, sigm
     plt.title(f"Distribution du signal après le canal {chann_type} (CSI bruité)")
     plt.legend()
     plt.grid()
+    plt.savefig(f"plots/{chann_type}_distribution_CSI.png")
     #plt.show()
 
 
