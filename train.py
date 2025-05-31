@@ -24,6 +24,10 @@ train = True
 if not os.path.exists('saved_models'):
     os.makedirs('saved_models')
 
+# Créer un dossier pour sauvegarder les mfigures
+if not os.path.exists('plots'):
+    os.makedirs('plots')
+
 def save_models(encoder, decoder, feedback_model=None, prefix='', chann_type='AWGN'):
     torch.save(encoder.state_dict(), f'saved_models/{prefix}encoder_{chann_type}.pth', _use_new_zipfile_serialization=True)
     torch.save(decoder.state_dict(), f'saved_models/{prefix}decoder_{chann_type}.pth', _use_new_zipfile_serialization=True)
@@ -404,26 +408,28 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     return metrics
 
-chann_type = "AWGN"
+chann_type = "Rayleigh"
 n_epochs = 20000
+m, n = 16, 7  # Paramètres de l'autoencodeur
+k = math.log2(m)
 
 # Entraînement classique (sans feedback)
 print("Training with perfect CSI...")
-encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m=16, n=7, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=n_epochs, lr=0.001,
+encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m, n, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=n_epochs, lr=0.001,
                                                     clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=0.0)
 
 save_models(encoder_perfect, decoder_perfect, prefix='perfect_', chann_type=chann_type)
 
 # Entraînement avec Feedback bruité sans correction ML
 print("Training with noisy feedback (no ML)...")
-encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder_with_feedback(m=16, n=7, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
+encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder_with_feedback(m, n, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
                                                                 chann_type="Rayleigh", batch_size=64, n_epochs=n_epochs, lr=0.001,
                                                                 clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0, binary=False, use_ml_feedback=False)
 
 save_models(encoder_feedback, decoder_feedback, prefix='noisy_', chann_type=chann_type)
 
 print("Training with noisy feedback (with ML)...")
-encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder_with_feedback(16, 7, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
+encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder_with_feedback(m, n, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
                                                                 chann_type="Rayleigh", batch_size=64, n_epochs=n_epochs,lr=0.001, clipping=0.5, plot=100, stop_value=0.0001,
                                                                 sigma_CSI=0.5, binary=False, use_ml_feedback=True)
 
@@ -440,8 +446,6 @@ plt.ylabel("BER")
 plt.title("Impact du Feedback Bruité sur l'Autoencodeur")
 plt.legend()
 plt.grid()
-plt.savefig(f"plots/{chann_type}_BER_epochs.png")
-
 
 if feedback_model is not None:
         plt.figure(figsize=(10, 6))
@@ -451,7 +455,6 @@ if feedback_model is not None:
         plt.title("Évolution de la perte du modèle de feedback")
         plt.legend()
         plt.grid()
-        plt.savefig(f"plots/{chann_type}_loss.png")
 
 plt.tight_layout()
 plt.show()

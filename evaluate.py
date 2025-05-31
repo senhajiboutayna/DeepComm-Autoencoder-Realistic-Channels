@@ -14,7 +14,7 @@ import time
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
 from utils import MemoryMessages, count_errors, plot_constellations
-from com_System import qpsk_communication
+from com_System import qpsk_communication, bpsk_communication
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -138,8 +138,9 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
 snr_values = np.arange(-5, 10, 2)  # SNR en dB
 n_samples = 20000  # Nombre d'échantillons pour l'évaluation
-m, n, k = 16, 7, 4  # Paramètres de l'autoencodeur
-chann_type = 'AWGN'
+m, n = 16, 7  # Paramètres de l'autoencodeur
+k = int(math.log2(m))
+chann_type = 'Rayleigh'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type, use_csi=False)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type, use_csi=True)
