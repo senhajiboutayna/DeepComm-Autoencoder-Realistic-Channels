@@ -227,9 +227,10 @@ def plot_channel_distribution_CSI(x, snr_db, chann_type="AWGN", K_rician=3, sigm
 
 """
 # Affichage des distributions simulées et théoriques
-plot_channel_distribution(snr_db=10, chann_type="AWGN")
-plot_channel_distribution(snr_db=10, chann_type="Rayleigh")
-plot_channel_distribution(snr_db=10, chann_type="Rician", K_rician=3)
+snr_db = 10
+plot_channel_distribution(snr_db, chann_type="AWGN")
+plot_channel_distribution(snr_db, chann_type="Rayleigh")
+plot_channel_distribution(snr_db, chann_type="Rician", K_rician=3)
 
 # Affichage des distributions de fading
 plot_fading_distributions()
@@ -238,9 +239,9 @@ plot_fading_distributions()
 evaluate_CSI_impact()
 
 # Affichage de la distribution du signal apres le CSI
-plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="AWGN", K_rician=3, sigma_CSI=1.0)
-plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="Rayleigh", K_rician=3, sigma_CSI=1.0)
-plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=10, chann_type="Rician", K_rician=3, sigma_CSI=1.0)
+plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=1.0)
+plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=snr_db, chann_type="Rayleigh", K_rician=3, sigma_CSI=1.0)
+plot_channel_distribution_CSI(x=torch.ones(10000), snr_db=snr_db, chann_type="Rician", K_rician=3, sigma_CSI=1.0)
 
 plt.show()
 """
