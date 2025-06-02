@@ -135,8 +135,8 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     return metrics
 
-snr_values = np.arange(-2, 11, 2)  # SNR en dB
-n_samples = 30000  # Nombre d'échantillons pour l'évaluation
+snr_values = np.arange(-2, 13, 2)  # SNR en dB
+n_samples = 100000  # Nombre d'échantillons pour l'évaluation
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = int(math.log2(m))
 chann_type = 'Rayleigh'
@@ -151,7 +151,7 @@ results = {
     'noisy': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []},
     'ml': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []}
     }
-ber_qpsk = []
+ber_bpsk = []
 
 # Boucle sur chaque SNR
 for snr in snr_values:
@@ -181,14 +181,15 @@ for snr in snr_values:
         results['ml'][key].append(metrics[key])
     
     # QPSK
-    ber_qpsk.append(qpsk_communication(snr_db=snr, num_bits=n_samples, channel_type=chann_type))
+    print(" - BPSK")
+    ber_bpsk.append(bpsk_communication(snr_db=snr, num_bits=n_samples, channel_type=chann_type))
 
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
 plt.semilogy(snr_values, results['perfect']['ber'], 'b-o', label='Perfect CSI')
-plt.semilogy(snr_values, results['ml']['ber'], 'r--s', label='Noisy feedback (no corrected)')
-plt.semilogy(snr_values, results['noisy']['ber'], 'g-.d', label='Noisy feedback (with ML correction)')
-plt.semilogy(snr_values, ber_qpsk, 'c', label='QPSK')
+plt.semilogy(snr_values, results['noisy']['ber'], 'r--s', label='Noisy feedback (no corrected)')
+plt.semilogy(snr_values, results['ml']['ber'], 'g-.d', label='Noisy feedback (with ML correction)')
+plt.semilogy(snr_values, ber_bpsk, 'c', label='BPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
 plt.title('Comparison of transmission performance: BER for one channel ' + chann_type + ' channel')

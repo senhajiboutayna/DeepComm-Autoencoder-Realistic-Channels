@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN", plot_constellation=False):
+def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN", K=3, plot_constellation=False):
     # Assurer que le nombre de bits est pair
     if num_bits % 2 != 0:
         num_bits += 1
@@ -25,11 +25,7 @@ def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN", plot_constel
 
     # Appliquer les effets du canal
     if channel_type == "AWGN":
-        # Version sans égalisation
-        received_no_eq = h * symbols + noise
-        # Version avec égalisation MMSE
-        received_with_eq = received_no_eq * np.conj(h) / (np.abs(h)**2 + noise_power)
-        received_symbols = received_with_eq  # On utilise la version avec égalisation pour le BER
+        received_symbols = symbols + noise
 
     elif channel_type == "Rayleigh":
         h = (np.random.randn(len(symbols)) + 1j * np.random.randn(len(symbols))) / np.sqrt(2)
@@ -40,7 +36,6 @@ def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN", plot_constel
         received_symbols = received_with_eq  # On utilise la version avec égalisation pour le BER
 
     elif channel_type == "Rician":
-        K = 3  # Facteur K du canal Rician
         h_los = np.ones(len(symbols))  # Composante LOS
         h_nlos = (np.random.randn(len(symbols)) + 1j * np.random.randn(len(symbols))) / np.sqrt(2)
         h = np.sqrt(K / (K + 1)) * h_los + np.sqrt(1 / (K + 1)) * h_nlos

@@ -304,133 +304,31 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
 
     return encoder, decoder, feedback_model, errors, feedback_losses
 
-def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_samples, sigma_CSI=0.5, feedback_params=None, feedback_model=None):
-    """
-    Évalue les performances de l'autoencodeur en termes de taux d'erreur binaire (BER).
-
-    Args:
-        encoder (nn.Module): Le modèle de l'encodeur.
-        decoder (nn.Module): Le modèle du décodeur.
-        m (int): Nombre de messages possibles.
-        n (int): Dimension du signal encodé.
-        k (int): Nombre de bits par message.
-        snr_db (float): Rapport signal sur bruit en dB.
-        chann_type (str): Type de canal (par exemple, "AWGN").
-        n_samples (int): Nombre d'échantillons à utiliser pour l'évaluation.
-        sigma_CSI (float): Paramètre de variance pour le canal.
-        feedback_params (dict): Paramètres du feedback (snr_feedback, compression_level, delay).
-        feedback_model (nn.Module): Modèle pour améliorer le feedback CSI.
-
-    Returns:
-        dict: Résultats contenant BER, SER, capacité, latence et constellations.
-    """
-    encoder.eval()  # Mettre l'encodeur en mode évaluation
-    decoder.eval()  # Mettre le décodeur en mode évaluation
-    if feedback_model is not None:
-        feedback_model.eval()
-
-    metrics = {
-        'ber' : 0,
-        'ser' : 0,
-        'capacity' : 0,
-        'latency' : 0,
-        'constellations' : []
-    }
-
-    start_time = time.time()  # Mesure du temps de transmission
-    total_errors = 0
-    total_symbol_errors = 0
-    total_bits = 0
-
-    with torch.no_grad():  # Désactiver le calcul du gradient pour l'évaluation
-        for _ in range(n_samples):
-            # Générer un message aléatoire
-            message = np.random.randint(0, m, size=(n,))
-            message_tensor = torch.from_numpy(message)
-            message_tensor = message_tensor.unsqueeze(1)
-            message_tensor = message_tensor.to(device)
-
-            # Encoder le message
-            encoded_data = encoder(message_tensor)
-
-            # Gestion du feedback si activé
-            current_sigma_CSI = sigma_CSI
-            if feedback_params is not None:
-                # Génération du vrai CSI (simulé)
-                true_csi = torch.randn(encoded_data.shape, device=device)
-
-                # Application du feedback avec ou sans ML
-                feedback_csi_value = feedback_csi(true_csi, 
-                                               feedback_params['snr_feedback'],
-                                               feedback_params['compression_level'],
-                                               feedback_params['delay'],
-                                               binary=False,
-                                               feedback_model=feedback_model,
-                                               use_ml=(feedback_model is not None))
-                current_sigma_CSI = feedback_csi_value
-
-            # Passer le message encodé à travers le canal
-            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=current_sigma_CSI)
-
-            # Décoder le message
-            decoded_data = decoder(data_channel)
-
-            # Convertir la sortie du décodeur en prédiction
-            predicted_message = torch.argmax(decoded_data, dim=1).cpu().numpy()
-
-            # Compter les erreurs
-            total_errors += np.sum(predicted_message != message)
-
-            # Vérifier que la taille est un multiple de k
-            num_symbols = predicted_message.shape[0]
-            if num_symbols % k != 0:
-                print(f"Avertissement: Tronquage de {num_symbols % k} éléments pour correspondre à k={k}")
-                predicted_message = predicted_message[:num_symbols - (num_symbols % k)]
-                message = message[:num_symbols - (num_symbols % k)]
-            total_symbol_errors += np.sum(np.any(predicted_message.reshape(-1, k) != message.reshape(-1, k), axis=1))
-            total_bits += k  # Chaque message contient k bits
-            
-            # Stockage des constellations pour visualisation
-            if len(metrics['constellations']) < 1000: #Limiter le nmb stocké
-                metrics['constellations'].append(data_channel.cpu().numpy())
-    
-    # Calcul de latence
-    end_time = time.time()
-    metrics['latency'] = end_time - start_time  # Latence de transmission
-
-    # Calculer le BER et SER
-    metrics['ber'] = total_errors / total_bits
-    metrics['ser'] = total_symbol_errors / n_samples
-
-    # Capacité du canal (Shannon)
-    snr_linear = 10 ** (snr_db / 10)
-    metrics['capacity'] = np.log2(1 + snr_linear)   # bits/s/Hz
-
-    return metrics
 
 chann_type = "Rayleigh"
-n_epochs = 20000
+n_epochs = 100000
+snr_db = 5
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = math.log2(m)
 
 # Entraînement classique (sans feedback)
 print("Training with perfect CSI...")
-encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m, n, snr_db=7, chann_type="Rayleigh", batch_size=64, n_epochs=n_epochs, lr=0.001,
+encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m, n, snr_db, chann_type="Rayleigh", batch_size=128, n_epochs=n_epochs, lr=0.001,
                                                     clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=0.0)
 
 save_models(encoder_perfect, decoder_perfect, prefix='perfect_', chann_type=chann_type)
 
 # Entraînement avec Feedback bruité sans correction ML
 print("Training with noisy feedback (no ML)...")
-encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder_with_feedback(m, n, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
-                                                                chann_type="Rayleigh", batch_size=64, n_epochs=n_epochs, lr=0.001,
+encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder_with_feedback(m, n, snr_db, snr_feedback=7, compression_level=2, delay=1,
+                                                                chann_type="Rayleigh", batch_size=128, n_epochs=n_epochs, lr=0.001,
                                                                 clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0, binary=False, use_ml_feedback=False)
 
 save_models(encoder_feedback, decoder_feedback, prefix='noisy_', chann_type=chann_type)
 
 print("Training with noisy feedback (with ML)...")
-encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder_with_feedback(m, n, snr_db=7, snr_feedback=7, compression_level=4, delay=2,
-                                                                chann_type="Rayleigh", batch_size=64, n_epochs=n_epochs,lr=0.001, clipping=0.5, plot=100, stop_value=0.0001,
+encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder_with_feedback(m, n, snr_db, snr_feedback=7, compression_level=2, delay=1,
+                                                                chann_type="Rayleigh", batch_size=128, n_epochs=n_epochs,lr=0.001, clipping=0.5, plot=100, stop_value=0.0001,
                                                                 sigma_CSI=0.5, binary=False, use_ml_feedback=True)
 
 save_models(encoder_ml, decoder_ml, feedback_model, prefix='ml_', chann_type=chann_type)
