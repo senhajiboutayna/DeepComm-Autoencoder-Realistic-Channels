@@ -134,11 +134,11 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     return metrics
 
-snr_values = np.arange(-4, 13, 2)  # SNR en dB
+snr_values = np.arange(-4, 9, 2)  # SNR en dB
 n_samples = 20000  # Nombre d'échantillons pour l'évaluation
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = int(math.log2(m))
-chann_type = 'Rayleigh'
+chann_type = 'AWGN'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type)
