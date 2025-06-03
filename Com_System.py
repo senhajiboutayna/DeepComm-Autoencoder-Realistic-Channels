@@ -1,5 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
+import math
+from channel import channel
 
 def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN", K=3, plot_constellation=False):
     # Assurer que le nombre de bits est pair
@@ -171,3 +174,112 @@ plt.legend()
 plt.grid()
 plt.show()
 """
+
+def qpsk(m, n, snr_db, num_bits=10000, chann_type="AWGN"):
+    """
+    Enhanced QPSK simulation with improved feedback handling for Rayleigh channels
+    
+    Parameters:
+        snr_db (float): SNR in dB for main channel
+        num_bits (int): Number of bits to transmit (must be even)
+        chann_type (str): Channel type ("AWGN", "Rayleigh", "Rician")
+        feedback_snr (float): SNR for feedback channel in dB
+        use_ml_feedback (bool): Whether to use ML-enhanced feedback correction
+        
+    Returns:
+        ber (float): Bit error rate
+    """
+
+    # Calculate number of bits needed
+    k = int(math.log2(m))
+    
+    # Ensure even number of bits
+    if num_bits % 2 != 0:
+        num_bits += 1
+
+    # Génération des bits aléatoires
+    bits = np.random.randint(0, 2, num_bits)
+
+    # Modulation QPSK (Mapper 2 bits → 1 symbole complexe)
+    bit_pairs = bits.reshape(-1, 2)
+    symbols = (2 * bit_pairs[ :, 0] - 1) + 1j * (2 * bit_pairs[ :, 1] - 1)  
+    symbols /= np.sqrt(2)  # Normalisation de la puissance
+    symbols = torch.tensor(symbols, dtype=torch.cfloat)
+
+    # Appliquer les effets du canal
+    if chann_type in ["AWGN", "Rayleigh", "Rician"]:
+        # Get channel state information with noise
+        x_channel, x_channel_csi, _, _, h_true, h_hat = channel(
+            symbols, snr_db, chann_type, sigma_CSI=0.1)
+        
+        # Enhanced equalization blending feedback and direct estimates
+        equalized = x_channel / h_hat
+        received_symbols = equalized
+
+    else:
+        raise ValueError(f"Type de canal non supporté: {chann_type}")
+
+    # Démodulation QPSK : Décision basée sur le quadrant
+    detected_bits = np.zeros((len(received_symbols), 2), dtype=int)
+    detected_bits[:, 0] = np.real(received_symbols) > 0  # Décision partie réelle
+    detected_bits[:, 1] = np.imag(received_symbols) > 0  # Décision partie imaginaire
+    detected_bits = detected_bits.flatten()  # Convertir en un tableau 1D
+
+    # Calcul du BER
+    errors = np.sum(bits != detected_bits)
+    total_bits = detected_bits.size
+    ber = errors / total_bits
+    return ber 
+
+def bpsk(m, n, snr_db, num_bits=10000, chann_type="AWGN"):
+    """
+    BPSK simulation with channel support
+    
+    Parameters:
+        snr_db (float): SNR in dB for main channel
+        num_bits (int): Number of bits to transmit
+        chann_type (str): Channel type ("AWGN", "Rayleigh", "Rician")
+        
+    Returns:
+        ber (float): Bit error rate
+    """
+
+    # Calculate number of bits needed
+    k = int(math.log2(m))
+    
+    # Pas besoin de forcer un nombre pair de bits pour BPSK
+    # Mais on garde pour compatibilité avec l'interface existante
+    if num_bits % 2 != 0:
+        num_bits += 1
+
+    # Génération des bits aléatoires
+    bits = np.random.randint(0, 2, num_bits)
+
+    # Modulation BPSK (Mapper 1 bit → 1 symbole réel)
+    symbols = (2 * bits - 1)  # Conversion: 0 → -1, 1 → +1
+    symbols = torch.tensor(symbols, dtype=torch.cfloat)  # On garde le type complexe pour compatibilité
+
+    # Appliquer les effets du canal
+    if chann_type in ["AWGN", "Rayleigh", "Rician"]:
+        # Get channel state information with noise
+        x_channel, x_channel_csi, _, _, h_true, h_hat = channel(
+            symbols, snr_db, chann_type, sigma_CSI=0.1)
+        
+        # Enhanced equalization blending feedback and direct estimates
+        equalized = x_channel / h_hat
+        received_symbols = equalized
+
+    else:
+        raise ValueError(f"Type de canal non supporté: {chann_type}")
+
+    # Conversion en numpy array pour le traitement
+    received_np = received_symbols.cpu().numpy() if received_symbols.is_cuda else received_symbols.numpy()
+    
+    # Démodulation BPSK : Décision basée sur le signe
+    detected_bits = (np.real(received_np) > 0).astype(int)  # On utilise seulement la partie réelle
+
+    # Calcul du BER
+    errors = np.sum(bits != detected_bits)
+    total_bits = detected_bits.size
+    ber = errors / total_bits
+    return ber

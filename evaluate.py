@@ -13,12 +13,11 @@ import time
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
-from utils import MemoryMessages, count_errors, plot_constellations
-from com_System import qpsk_communication, bpsk_communication
+from com_System import qpsk, bpsk
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-def load_models(m, n, prefix='', chann_type='AWGN', use_csi=False):
+def load_models(m, n, prefix='', chann_type='AWGN'):
     encoder = Encoder(m=m, n=n).to(device)
     decoder = Decoder(m=m, n=n).to(device)
     
@@ -141,9 +140,9 @@ m, n = 16, 7  # Paramètres de l'autoencodeur
 k = int(math.log2(m))
 chann_type = 'Rayleigh'
 
-encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type, use_csi=False)
-encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type, use_csi=True)
-encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_type=chann_type, use_csi=True)
+encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type)
+encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type)
+encoder_ml, decoder_ml, feedback_model = load_models(m, n, prefix='ml_', chann_type=chann_type)
 
 # Stockage des résultats
 results = {
@@ -152,6 +151,7 @@ results = {
     'ml': {'ber': [], 'ser': [], 'capacity': [], 'latency': [], 'constellations': []}
     }
 ber_bpsk = []
+ber_qpsk = []
 
 # Boucle sur chaque SNR
 for snr in snr_values:
@@ -181,19 +181,24 @@ for snr in snr_values:
         results['ml'][key].append(metrics[key])
     
     # QPSK
+    print(" - QPSK")
+    ber_qpsk.append(qpsk(m, n, snr_db=snr, num_bits=n_samples, chann_type=chann_type))
+    
+    # BPSK
     print(" - BPSK")
-    ber_bpsk.append(bpsk_communication(snr_db=snr, num_bits=n_samples, channel_type=chann_type))
+    ber_bpsk.append(bpsk(m, n, snr_db=snr, num_bits=n_samples, chann_type=chann_type))
 
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
 plt.semilogy(snr_values, results['perfect']['ber'], 'b-o', label='Perfect CSI')
 plt.semilogy(snr_values, results['noisy']['ber'], 'r--s', label='Noisy feedback (no corrected)')
 plt.semilogy(snr_values, results['ml']['ber'], 'g-.d', label='Noisy feedback (with ML correction)')
+plt.semilogy(snr_values, ber_qpsk, 'm', label='QPSK')
 plt.semilogy(snr_values, ber_bpsk, 'c', label='BPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
 plt.title('Comparison of transmission performance: BER for one channel ' + chann_type + ' channel')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
-plt.savefig(f"plots/{chann_type}_BER.png")
+#plt.savefig(f"plots/{chann_type}_BER.png")
 plt.show()

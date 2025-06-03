@@ -8,13 +8,11 @@ import math
 
 import matplotlib.pyplot as plt
 from IPython.utils import io
-import time
 import os
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
-from utils import MemoryMessages, count_errors, plot_constellations
-from com_System import qpsk_communication
+from utils import MemoryMessages, count_errors
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -306,8 +304,8 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
 
 
 chann_type = "Rayleigh"
-n_epochs = 100000
-snr_db = 5
+n_epochs = 50000
+snr_db = np.random.uniform(-2, 7)
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = math.log2(m)
 
