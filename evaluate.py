@@ -187,8 +187,8 @@ for snr in snr_values:
 # Tracé BER vs SNR
 plt.figure(figsize=(10, 6))
 plt.semilogy(snr_values, results['perfect']['ber'], label='Perfect CSI')
-plt.semilogy(snr_values, results['ml']['ber'], label='Noisy feedback (no corrected)')
-plt.semilogy(snr_values, results['noisy']['ber'], label='Noisy feedback (with ML correction)')
+plt.semilogy(snr_values, results['noisy']['ber'], label='Noisy feedback (not corrected)')
+plt.semilogy(snr_values, results['ml']['ber'], label='Noisy feedback (with ML correction)')
 plt.semilogy(snr_values, ber_qpsk, label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')

@@ -12,7 +12,7 @@ import os
 
 from channel import channel, feedback_csi
 from models import Encoder, Decoder, FeedbackCorrection
-from utils import MemoryMessages, count_errors
+from utils import MemoryMessages, count_errors, composite_loss
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -70,11 +70,8 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             data = data.unsqueeze(1) #Ajout de la dimension 1
             data = data.to(device) #Transfert du tenseur vers le GPU
 
-            print(f"Data Shape: {data.shape}")  # Assurer que la forme est correcte
-
             ### Passage du message par l'encoder
             encoded_data = encoder(data)
-            print(f"Encoded Data Shape: {encoded_data.shape}")  # Vérifie la sortie de l'encodeur
 
             # torch.isnan().any() : Détection de valeurs NaN dans un tenseur PyTorch
             if torch.isnan(encoded_data).any():
@@ -88,7 +85,6 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
                 print("NaN detected after channel. Epoch: %d" % (epoch))
                 break
 
-            print(f"Data Channel Shape: {data_channel.shape}")
 
             ### Passage du message par le decoder
             decoded_data = decoder(data_channel)
@@ -96,13 +92,11 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
                 print("NaN detected after Decoder. Epoch: %d" % (epoch))
                 break
 
-            print(f"Decoded Data Shape: {decoded_data.shape}")
 
             # Conversion des targets en tenseur PyTorch 
 
             targets = torch.from_numpy(targets_np).to(device)
             targets = targets.type(torch.long)
-            print(f"Targets Shape: {targets.shape}")
             assert targets.dtype == torch.long, "Targets must be LongTensor"
 
             ### Calcul de la perte avec Cross Entropy
@@ -134,11 +128,8 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             Si la perte est constante ou très faible, cela peut indiquer que le modèle a convergé (il a appris aussi bien qu'il le peut).
             """
             last_losses = np.array(losses[-10:])
-            print('les 10 dernières valeurs de perte :', last_losses)
             if np.all(last_losses < stop_value):
                 print("Le modele a converge après %d epochs." % (epoch))
-            else:
-                print("L'entrainement continue.")
 
             # If the loss is small enough the model has converged. Stop training
             if np.all(last_losses < stop_value):
@@ -193,12 +184,10 @@ def train_autoencoder(m, n, snr_db, chann_type, batch_size, n_epochs, lr, clippi
             if epoch == n_epochs-1 : 
                 print("Finished training. Errors %f. Loss: %f" % (errors[-1], losses[-1]))
 
-            print("Errors :", errors)
-
 
     return encoder, decoder, errors
 
-def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_level, delay, chann_type, batch_size, n_epochs, lr, clipping, plot, stop_value, sigma_CSI=0.5, binary=False, use_ml_feedback=True):
+def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_level, delay, chann_type, batch_size, n_epochs, lr, clipping, plot, binary=False, use_ml_feedback=True):
     """
     Entraîne l'autoencodeur en utilisant un feedback CSI bruité et compressé.
 
@@ -228,10 +217,9 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
     decoder = Decoder(m=m, n=n).to(device)
 
     # Modèle pour améliorer le feedback CSI
-    feedback_model = None
-    if use_ml_feedback:
-        feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=128).to(device)
-        feedback_optimizer = optim.Adam(feedback_model.parameters(), lr=lr)
+
+    feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=512).to(device)
+    feedback_optimizer = optim.AdamW(feedback_model.parameters(), lr=1e-4, weight_decay=1e-5)
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr)
     decoder_optimizer = optim.Adam(decoder.parameters(), lr=lr)
@@ -257,35 +245,55 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
 
             encoded_data = encoder(data)
 
-            with torch.no_grad():
-                _, _, _, _, h_true, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=sigma_CSI)
-            feedback_csi_value = feedback_csi(h_true, snr_feedback, compression_level, delay, binary, feedback_model, use_ml_feedback)
+            _, _, _, _, true_csi, _ = channel(encoded_data, snr_db, chann_type, sigma_CSI=0.0)
 
-            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=feedback_csi_value)
+            noisy_csi = feedback_csi(
+                            true_csi, snr_feedback, compression_level, delay, binary,
+                            feedback_model=None, use_ml=False
+                        )
+            _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=noisy_csi)
             data_channel = torch.clamp(data_channel, -1e5, 1e5)
-
             decoded_data = decoder(data_channel)
 
-            # Calcul de la perte principale
+            if use_ml_feedback:
+                    corrected_csi = feedback_csi(
+                        true_csi, snr_feedback, compression_level, delay, binary,
+                        feedback_model=feedback_model, use_ml=True
+                    )
+                    _, data_channel, _, _, _, _ = channel(encoded_data, snr_db, chann_type=chann_type, sigma_CSI=corrected_csi)
+                    data_channel = torch.clamp(data_channel, -1e5, 1e5)
+                    decoded_data = decoder(data_channel)
+
+
+            # Main loss calculation
             targets = torch.from_numpy(targets_np).to(device).type(torch.long)
             loss = F.cross_entropy(decoded_data, targets)
             
-            # Calcul de la perte de feedback
+            # Feedback loss calculation
             if use_ml_feedback:
-                feedback_loss = F.mse_loss(feedback_csi_value, h_true)
-                total_loss = loss + 0.1 *feedback_loss
+                feedback_loss = F.mse_loss(corrected_csi.float(), true_csi.float().to(device))
+                total_loss = loss + 0.1 * feedback_loss
                 epoch_feedback_loss += feedback_loss.item()
             else :
                 total_loss = loss
 
             total_loss.backward()
 
+            assert total_loss.requires_grad, "total_loss ne nécessite pas de gradient — vérifie que le chemin feedback est différentiable"
+
+            # Optimization steps
+            if clipping > 0:
+                torch.nn.utils.clip_grad_norm_(encoder.parameters(), clipping)
+                torch.nn.utils.clip_grad_norm_(decoder.parameters(), clipping)
+                if use_ml_feedback:
+                    torch.nn.utils.clip_grad_norm_(feedback_model.parameters(), clipping)
+
             encoder_optimizer.step()
             decoder_optimizer.step()
             if use_ml_feedback:
                 feedback_optimizer.step()
 
-            epoch_losses.append(loss.item())
+            epoch_losses.append(total_loss.item())
             epoch_errors += count_errors(decoded_data, targets)
 
         losses.append(np.mean(epoch_losses))
@@ -303,15 +311,15 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
     return encoder, decoder, feedback_model, errors, feedback_losses
 
 
-chann_type = "Rayleigh"
-n_epochs = 50000
+chann_type = "AWGN"
+n_epochs = 100000
 snr_db = 5
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = math.log2(m)
 
 # Entraînement classique (sans feedback)
 print("Training with perfect CSI...")
-encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m, n, snr_db, chann_type="Rayleigh", batch_size=128, n_epochs=n_epochs, lr=0.001,
+encoder_perfect, decoder_perfect, errors_perfect = train_autoencoder(m, n, snr_db, chann_type=chann_type, batch_size=128, n_epochs=n_epochs, lr=0.0001,
                                                     clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=0.0)
 
 save_models(encoder_perfect, decoder_perfect, prefix='perfect_', chann_type=chann_type)
@@ -319,15 +327,15 @@ save_models(encoder_perfect, decoder_perfect, prefix='perfect_', chann_type=chan
 # Entraînement avec Feedback bruité sans correction ML
 print("Training with noisy feedback (no ML)...")
 encoder_feedback, decoder_feedback, _, errors_feedback, _ = train_autoencoder_with_feedback(m, n, snr_db, snr_feedback=7, compression_level=2, delay=1,
-                                                                chann_type="Rayleigh", batch_size=128, n_epochs=n_epochs, lr=0.001,
-                                                                clipping=0.5, plot=100, stop_value=0.000005, sigma_CSI=1.0, binary=False, use_ml_feedback=False)
+                                                                chann_type=chann_type, batch_size=128, n_epochs=n_epochs, lr=0.0001,
+                                                                clipping=0.5, plot=100, binary=False, use_ml_feedback=False)
 
 save_models(encoder_feedback, decoder_feedback, prefix='noisy_', chann_type=chann_type)
 
 print("Training with noisy feedback (with ML)...")
 encoder_ml, decoder_ml, feedback_model, errors_ml, feedback_losses = train_autoencoder_with_feedback(m, n, snr_db, snr_feedback=7, compression_level=2, delay=1,
-                                                                chann_type="Rayleigh", batch_size=128, n_epochs=n_epochs,lr=0.001, clipping=0.5, plot=100, stop_value=0.0001,
-                                                                sigma_CSI=0.5, binary=False, use_ml_feedback=True)
+                                                                chann_type=chann_type, batch_size=128, n_epochs=n_epochs ,lr=0.0001, clipping=0.5, plot=100,
+                                                                binary=False, use_ml_feedback=True)
 
 save_models(encoder_ml, decoder_ml, feedback_model, prefix='ml_', chann_type=chann_type)
 

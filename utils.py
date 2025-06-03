@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -155,3 +156,8 @@ def plot_training_loss(losses):
     plt.legend()
     plt.grid()
     plt.show()
+
+def composite_loss(corrected, target, alpha=0.5):
+    mse = F.mse_loss(corrected, target)
+    spectral = F.l1_loss(np.fft(corrected), np.fft(target))
+    return alpha*mse + (1-alpha)*spectral

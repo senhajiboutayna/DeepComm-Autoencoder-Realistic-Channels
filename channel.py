@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm, rayleigh, rice
@@ -367,6 +368,6 @@ def feedback_csi(true_csi, snr_feedback, compression_level, delay=0, binary=Fals
 
     # Utilisation d'un modèle ML pour améliorer le feedback
     if use_ml and feedback_model is not None:
-        quantized_csi = feedback_model(quantized_csi.unsqueeze(0)).squeeze(0)
+        quantized_csi = feedback_model(quantized_csi)
 
     return quantized_csi
