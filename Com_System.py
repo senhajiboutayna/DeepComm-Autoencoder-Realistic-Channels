@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import math
-from channel import channel
+from channel import channel2
 
 def qpsk_communication(snr_db, num_bits=10000, channel_type="AWGN", K=3, plot_constellation=False):
     # Assurer que le nombre de bits est pair
@@ -209,7 +209,7 @@ def qpsk(m, n, snr_db, num_bits=10000, chann_type="AWGN"):
     # Appliquer les effets du canal
     if chann_type in ["AWGN", "Rayleigh", "Rician"]:
         # Get channel state information with noise
-        x_channel, x_channel_csi, _, _, h_true, h_hat = channel(
+        x_channel, x_channel_csi, _, _, h_true, h_hat = channel2(
             symbols, snr_db, chann_type, sigma_CSI=0.1)
         
         # Enhanced equalization blending feedback and direct estimates
@@ -262,7 +262,7 @@ def bpsk(m, n, snr_db, num_bits=10000, chann_type="AWGN"):
     # Appliquer les effets du canal
     if chann_type in ["AWGN", "Rayleigh", "Rician"]:
         # Get channel state information with noise
-        x_channel, x_channel_csi, _, _, h_true, h_hat = channel(
+        x_channel, x_channel_csi, _, _, h_true, h_hat = channel2(
             symbols, snr_db, chann_type, sigma_CSI=0.1)
         
         # Enhanced equalization blending feedback and direct estimates

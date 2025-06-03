@@ -76,6 +76,94 @@ def channel(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0, plot=False)
     
     # Ajout du bruit sur l'estimation du canal (CSI imparfait)
     if chann_type == "AWGN":
+        h_hat = 1 + sigma_CSI * 0.1 * torch.randn_like(h)  # Réduit l'impact du bruit
+        h_hat = torch.clamp(h_hat, min=0.5, max=1.5)  # Garde une variation plus réaliste
+        x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
+    else:
+        h_hat = torch.clamp(h + sigma_CSI * torch.abs(torch.randn_like(h)), min=0.1)
+        x_channel_CSI = h_hat * x + noise
+
+    # Égalisation avec CSI parfait
+    x_received = x_channel / h  
+
+    # Égalisation avec CSI bruité
+    x_received_CSI = x_channel / h_hat 
+
+    return x_channel,x_channel_CSI, x_received, x_received_CSI, h, h_hat
+
+def channel2(x, snr_db, chann_type="AWGN", K_rician=3, sigma_CSI=0.0, plot=False):
+    """
+    Simule un canal de communication avec AWGN, Rayleigh ou Rician fading.
+    Simule un canal de communication avec CSI parfait ou bruité.
+    
+    Args:
+        x : Signal d'entrée (PyTorch Tensor)
+        snr_db : Rapport Signal/Bruit en dB
+        chann_type : Type de canal ("AWGN", "Rayleigh" ou "Rician")
+        K_rician : Facteur K du canal Rician (par défaut 3)
+        sigma_CSI : Intensité du bruit sur l'estimation du canal (0 = CSI parfait)
+
+    Returns:
+        x_channel : Signal reçu après le canal
+        x_received : Signal avec CSI parfait
+        x_received_csi_bruite : Signal avec CSI bruité
+        h : Véritable coefficient du canal
+        h_hat : Estimation bruitée du canal
+    """
+    snr_lin = 10**(snr_db / 10)  # Convertir SNR dB en linéaire
+    n0 = 1 / snr_lin  # Variance du bruit (normalisée)
+    sigma_noise = np.sqrt(n0 / 2)  # Écart-type du bruit
+
+    if chann_type == "AWGN":
+        h = torch.ones_like(x)  # Canal AWGN = pas d'effet de fading, donc h = 1
+        noise = sigma_noise * torch.randn_like(x)  # Bruit Gaussien
+        x_channel = h * x + noise
+
+    elif chann_type == "Rayleigh":
+        # Fading Rayleigh (module d'un signal complexe gaussien)
+        h = torch.sqrt(torch.randn_like(x) ** 2 + torch.randn_like(x) ** 2) / np.sqrt(2)
+        noise = sigma_noise * torch.randn_like(x)
+        x_channel = h * x + noise  # Application du fading
+
+        # Plot histogram of |h|² if requested
+        if plot:
+            plt.figure(figsize=(10, 5))
+            h_np = h.numpy()
+            h_squared = np.abs(h_np)**2
+            
+            # Plot histogram
+            plt.hist(h_squared, bins=50, density=True, alpha=0.6, label="Simulated |h|²")
+            
+            # Plot theoretical exponential PDF
+            x = np.linspace(0, 5, 100)
+            plt.plot(x, np.exp(-x), 'r-', label="Theoretical exp(-x)")
+            
+            plt.title('Distribution of |h|² for Rayleigh Fading Channel')
+            plt.xlabel('|h|²')
+            plt.ylabel('Probability Density')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('plots/h_squared_rayleigh.png')
+
+    elif chann_type == "Rician":
+        # Fading Rician = Composante directe + diffusion (Rayleigh)
+        K = torch.tensor(K_rician, dtype=torch.float32)  # Facteur K
+        s = np.sqrt(K)  # Composante directe (LOS)
+        sigma_fading = np.sqrt(1 / (2 * (K + 1)))  # Composante diffusée (NLOS)
+
+         # Génération du coefficient de fading Rician
+        h_real = s + sigma_fading * torch.randn_like(x)
+        h_imag = sigma_fading * torch.randn_like(x)
+        h = torch.sqrt(h_real**2 + h_imag**2)  # Module du canal
+    
+        noise = sigma_noise * torch.randn_like(x)   # Bruit Gaussien
+        x_channel = h * x + noise   # Application du fading
+
+    else:
+        raise ValueError(f"Type de canal non supporté: {chann_type}")
+    
+    # Ajout du bruit sur l'estimation du canal (CSI imparfait)
+    if chann_type == "AWGN":
         h_hat = 1 + sigma_CSI * torch.randn_like(h)  # Réduit l'impact du bruit
         x_channel_CSI = h_hat * x + noise  # Signal reçu avec bruit sur l'estimation du canal
     else:

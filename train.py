@@ -305,7 +305,7 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
 
 chann_type = "Rayleigh"
 n_epochs = 50000
-snr_db = np.random.uniform(-2, 7)
+snr_db = 5
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = math.log2(m)
 
