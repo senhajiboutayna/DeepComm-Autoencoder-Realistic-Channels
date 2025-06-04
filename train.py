@@ -11,7 +11,7 @@ from IPython.utils import io
 import os
 
 from channel import channel, feedback_csi
-from models import Encoder, Decoder, FeedbackCorrection
+from models import Encoder, Decoder, FeedbackCorrection, FeedbackCorrection2
 from utils import MemoryMessages, count_errors, composite_loss
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -218,7 +218,7 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
 
     # Modèle pour améliorer le feedback CSI
 
-    feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=512).to(device)
+    feedback_model = FeedbackCorrection2(input_dim=n, hidden_dim=512).to(device)
     feedback_optimizer = optim.AdamW(feedback_model.parameters(), lr=1e-4, weight_decay=1e-5)
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr)
@@ -311,7 +311,7 @@ def train_autoencoder_with_feedback(m, n, snr_db, snr_feedback, compression_leve
     return encoder, decoder, feedback_model, errors, feedback_losses
 
 
-chann_type = "AWGN"
+chann_type = "Rayleigh"
 n_epochs = 100000
 snr_db = 5
 m, n = 16, 7  # Paramètres de l'autoencodeur

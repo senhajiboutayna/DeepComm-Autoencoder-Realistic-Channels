@@ -12,7 +12,7 @@ import os
 import time
 
 from channel import channel, feedback_csi
-from models import Encoder, Decoder, FeedbackCorrection
+from models import Encoder, Decoder, FeedbackCorrection, FeedbackCorrection2
 from com_System import qpsk, bpsk
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -26,7 +26,7 @@ def load_models(m, n, prefix='', chann_type='AWGN'):
     
     feedback_model = None
     if os.path.exists(f'saved_models/{prefix}feedback_model.pth'):
-        feedback_model = FeedbackCorrection(input_dim=n, hidden_dim=128, robust=False).to(device)
+        feedback_model = FeedbackCorrection2(input_dim=n, hidden_dim=128, robust=False).to(device)
         feedback_model.load_state_dict(torch.load(f'saved_models/{prefix}feedback_{chann_type}.pth', weights_only=True))
     
     return encoder, decoder, feedback_model
@@ -134,11 +134,11 @@ def evaluate_autoencoder(encoder, decoder, m, n, k, snr_db, chann_type, n_sample
 
     return metrics
 
-snr_values = np.arange(-4, 9, 2)  # SNR en dB
+snr_values = np.arange(-4, 21, 2)  # SNR en dB
 n_samples = 20000  # Nombre d'échantillons pour l'évaluation
 m, n = 16, 7  # Paramètres de l'autoencodeur
 k = int(math.log2(m))
-chann_type = 'AWGN'
+chann_type = 'Rayleigh'
 
 encoder_perfect, decoder_perfect, _ = load_models(m, n, prefix='perfect_', chann_type=chann_type)
 encoder_feedback, decoder_feedback, _ = load_models(m, n, prefix='noisy_', chann_type=chann_type)
@@ -192,7 +192,7 @@ plt.semilogy(snr_values, results['ml']['ber'], label='Noisy feedback (with ML co
 plt.semilogy(snr_values, ber_qpsk, label='QPSK')
 plt.xlabel('SNR (dB)')
 plt.ylabel('BER')
-plt.title('Comparison of transmission performance: BER for one channel ' + chann_type + ' channel')
+plt.title('Comparison of transmission performance: BER for ' + chann_type + ' channel')
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.legend()
 #plt.savefig(f"plots/{chann_type}_BER.png")
