@@ -14,7 +14,6 @@ Instead of assuming ideal AWGN channels, we integrate **fading models** (Rayleig
 ```
 📂 DeepComm-Autoencoder-Realistic-Channels 
 │── 📄 README.md # Project documentation 
-│── 📄 requirements.txt # Dependencies
 │── 📄 channel.py # Simulates channels
 │── 📄 com_System.py # Simulates an QPSK communication system
 │── 📄 evaluate.py # Model evaluation and performance analysis
@@ -35,16 +34,13 @@ git clone https://github.com/senhajibooutayna/DeepComm-Autoencoder-Realistic-Cha
 cd DeepComm-Autoencoder-Realistic-Channels
 ```
 
-### 2️⃣ Install Dependencies
+### 2️⃣ Train the model
 Ensure you have Python installed, then run:
 ```bash
-pip install -r requirements.txt
+pip train.py
 ```
 
 ### 3️⃣ Run a Basic Test
-```bash
-python train.py
-```
 ```bash
 python evaluate.py
 ```

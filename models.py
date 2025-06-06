@@ -131,7 +131,8 @@ class FeedbackCorrection2(nn.Module):
             nn.Linear(hidden_dim//2, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, input_dim)
+            nn.Linear(hidden_dim, input_dim),
+            nn.Tanh()
         )
         
         # Initialisation des poids
