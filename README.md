@@ -13,16 +13,17 @@ Instead of assuming ideal AWGN channels, we integrate **fading models** (Rayleig
 ## 🏗️ Project Structure
 ```
 📂 DeepComm-Autoencoder-Realistic-Channels 
-│── 📄 README.md # Project documentation 
+│── 📂 plots # Generated plots
+│── 📂 saved_models # Folder to store trained models
 │── 📄 channel.py # Simulates channels
 │── 📄 com_System.py # Simulates an QPSK communication system
 │── 📄 evaluate.py # Model evaluation and performance analysis
 │── 📄 models.py # Neural network architectures 
 │── 📄 modulation.py # Modulation constraints and utilities
+│── 📄 Rapport.pdf 
+│── 📄 README.md # Project documentation 
 │── 📄 train.py # Main training script
-│── 📄 utils.py # Utility functions
-│── 📂 saved_models # Folder to store trained models
-└── 📂 plots # Generated plots
+└── 📄 utils.py # Utility functions
 ```
 
 
